@@ -2,6 +2,10 @@
 
 A powerful JavaScript SDK for rendering HTML content as paginated PDFs using Paged.js and html2pdf.js. Perfect for generating reports, invoices, documentation, and any print-ready content in the browser.
 
+## 🚀 Live Demo
+
+Try the interactive demo: **[https://eka-care.github.io/Pagify-sdk/](https://eka-care.github.io/Pagify-sdk/)**
+
 ## Features
 
 - ✨ **Client-side PDF generation** - No server dependencies

@@ -1,6 +1,6 @@
 {
   "name": "@eka-care/pagify-sdk",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "A powerful JavaScript SDK for rendering HTML content as paginated PDFs using Paged.js and html2pdf.js",
   "main": "dist/pagify.js",
   "module": "dist/pagify.esm.js",
