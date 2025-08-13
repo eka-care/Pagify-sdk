@@ -12,8 +12,9 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "rollup -c",
+    "build": "NODE_ENV=production rollup -c",
     "build:dev": "rollup -c --watch",
+    "build:unminified": "rollup -c",
     "dev": "npm run build:dev",
     "prepublishOnly": "npm run build",
     "test": "jest",
