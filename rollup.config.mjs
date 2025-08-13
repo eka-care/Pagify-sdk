@@ -45,6 +45,7 @@ export default [
             file: 'dist/pagify.js',
             format: 'umd',
             name: 'Pagify',
+            exports: 'named',
             sourcemap: true,
             globals: {
                 'pagedjs': 'PagedJS',
@@ -81,6 +82,7 @@ export default [
             file: 'dist/pagify.standalone.js',
             format: 'umd',
             name: 'Pagify',
+            exports: 'named',
             sourcemap: true,
             inlineDynamicImports: true
         },

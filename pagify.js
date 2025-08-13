@@ -79,6 +79,32 @@ class PagifySDK {
     }
 
     /**
+     * Load html2pdf library via script tag as fallback
+     */
+    loadHtml2PdfLibrary() {
+        return new Promise((resolve, reject) => {
+            // Check if html2pdf is already available
+            if (typeof window.html2pdf === 'function') {
+                resolve(window.html2pdf);
+                return;
+            }
+            
+            // Create script tag to load html2pdf
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js';
+            script.onload = () => {
+                if (typeof window.html2pdf === 'function') {
+                    resolve(window.html2pdf);
+                } else {
+                    reject(new Error('html2pdf not available after loading script'));
+                }
+            };
+            script.onerror = () => reject(new Error('Failed to load html2pdf script'));
+            document.head.appendChild(script);
+        });
+    }
+
+    /**
      * Render HTML content as a paginated PDF
      * @param {Object} options - Configuration options for PDF rendering
      * @param {string} options.body_html - Main HTML content for the PDF body
@@ -370,10 +396,65 @@ class PagifySDK {
                 try {
                     console.log('Starting PDF generation...');
                     
-                    // Import html2pdf dynamically
-                    const html2pdf = await import('https://unpkg.com/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js');
-                    
-                    console.log('html2pdf.js imported successfully');
+                    // Try dynamic import first, fallback to script loading
+                    let html2pdfLib;
+                    try {
+                        // Import html2pdf dynamically
+                        const html2pdfModule = await import('https://unpkg.com/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js');
+                        
+                        console.log('html2pdf.js imported successfully');
+                        console.log('html2pdf module structure:', Object.keys(html2pdfModule));
+                        
+                        // Try different ways to access html2pdf function
+                        if (typeof html2pdfModule.default === 'function') {
+                            html2pdfLib = html2pdfModule.default;
+                            console.log('Using html2pdfModule.default');
+                        } else if (typeof html2pdfModule.html2pdf === 'function') {
+                            html2pdfLib = html2pdfModule.html2pdf;
+                            console.log('Using html2pdfModule.html2pdf');
+                        } else if (typeof window.html2pdf === 'function') {
+                            html2pdfLib = window.html2pdf;
+                            console.log('Using window.html2pdf');
+                        } else {
+                            // Fallback: look for any function in the module
+                            const functionKeys = Object.keys(html2pdfModule).filter(key => typeof html2pdfModule[key] === 'function');
+                            if (functionKeys.length > 0) {
+                                html2pdfLib = html2pdfModule[functionKeys[0]];
+                                console.log('Using html2pdfModule.' + functionKeys[0]);
+                            } else {
+                                throw new Error('html2pdf function not found in imported module');
+                            }
+                        }
+                        
+                        if (typeof html2pdfLib !== 'function') {
+                            throw new Error('html2pdfLib is not a function. Available keys: ' + Object.keys(html2pdfModule).join(', '));
+                        }
+                    } catch (importError) {
+                        console.warn('Dynamic import failed, trying script tag approach:', importError);
+                        
+                        // Fallback: load via script tag
+                        await new Promise((resolve, reject) => {
+                            if (typeof window.html2pdf === 'function') {
+                                resolve();
+                                return;
+                            }
+                            
+                            const script = document.createElement('script');
+                            script.src = 'https://unpkg.com/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js';
+                            script.onload = () => {
+                                if (typeof window.html2pdf === 'function') {
+                                    resolve();
+                                } else {
+                                    reject(new Error('html2pdf not available after loading script'));
+                                }
+                            };
+                            script.onerror = () => reject(new Error('Failed to load html2pdf script'));
+                            document.head.appendChild(script);
+                        });
+                        
+                        html2pdfLib = window.html2pdf;
+                        console.log('Using window.html2pdf from script tag');
+                    }
                     
                     // Use the whole body element
                     const targetElement = document.body;
@@ -409,9 +490,6 @@ class PagifySDK {
                     };
                     
                     console.log('Starting html2pdf conversion with body element');
-                    
-                    // Use default export if available, otherwise use the module directly
-                    const html2pdfLib = html2pdf.default || html2pdf;
                     
                     html2pdfLib().set(opt).from(targetElement)
                         .toPdf()
