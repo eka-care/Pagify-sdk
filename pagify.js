@@ -89,6 +89,35 @@ class PagifySDK {
                         detail: { error: event.data.error } 
                     }));
                 }
+                else if (event.data?.type === "PREVIEW_READY") {
+                    const instanceId = event.data?.iter;
+                    if (instanceId && this.pdfCallbackStorage[instanceId]?.onPreviewReady) {
+                        this.pdfCallbackStorage[instanceId].onPreviewReady({
+                            success: true
+                        });
+                        delete this.pdfCallbackStorage[instanceId];
+                    }
+                    
+                    // Also trigger global preview ready event for backward compatibility
+                    window.dispatchEvent(new CustomEvent('previewReady', { 
+                        detail: { success: true } 
+                    }));
+                } else if (event.data?.type === "PREVIEW_ERROR") {
+                    console.error('Preview error:', event.data.error);
+                    
+                    const instanceId = event.data?.iter;
+                    if (instanceId && this.pdfCallbackStorage[instanceId]?.onPreviewReady) {
+                        this.pdfCallbackStorage[instanceId].onPreviewReady({
+                            success: false,
+                            error: event.data.error
+                        });
+                        delete this.pdfCallbackStorage[instanceId];
+                    }
+                    
+                    window.dispatchEvent(new CustomEvent('previewError', { 
+                        detail: { success: false, error: event?.data?.error } 
+                    }));
+                }
             }, false);
         }
     }
@@ -159,6 +188,7 @@ class PagifySDK {
         onPdfError = null,
         containerSelector = null,
         isViewOnlySkipMakingPDF = false,
+        onPreviewReady = null,
     }) {
         try {
             // Generate unique instance ID
@@ -172,6 +202,12 @@ class PagifySDK {
                 this.pdfCallbackStorage[instanceId] = {
                     onPdfReady: onPdfReady,
                     onPdfError: onPdfError
+                };
+            }
+            if (onPreviewReady) {
+                this.pdfCallbackStorage[instanceId] = {
+                    ...this.pdfCallbackStorage[instanceId],
+                    onPreviewReady: onPreviewReady
                 };
             }
 
@@ -460,15 +496,34 @@ class PagifySDK {
                         iter: ${instanceId}
                     }, "*");
 
-                    ${!isViewOnlySkipMakingPDF ? 'if (typeof generatePdfBlob === "function") { generatePdfBlob(); }' : ''}
+                    if (${isViewOnlySkipMakingPDF}) {
+                        window.parent.postMessage({ 
+                            type: "PREVIEW_READY",
+                            iter: ${instanceId}
+                        }, "*");
+                    } else {
+                        // PDF generation mode
+                        if (typeof generatePdfBlob === "function") { 
+                            generatePdfBlob(); 
+                        }
+                    }
                     
                 } catch (error) {
                     console.error('Failed to load or initialize Paged.js:', error);
+                    
+                if (${isViewOnlySkipMakingPDF}) {
+                    window.parent.postMessage({ 
+                        type: "PREVIEW_ERROR",
+                        error: "Failed to initialize Paged.js: " + error.message,
+                        iter: ${instanceId}
+                    }, "*");
+                    } else {
                     window.parent.postMessage({ 
                         type: "PDF_ERROR", 
                         error: "Failed to initialize Paged.js: " + error.message,
                         iter: ${instanceId}
                     }, "*");
+                    }
                 }
             });
         `;
