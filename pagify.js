@@ -632,9 +632,9 @@ class PagifySDK {
                 console.warn(`Container with selector "${containerSelector}" not found. Using document.body instead.`);
                 container = document.body;
             }
-            const oldPagifyIframes = container.querySelectorAll('iframe[data-pagify-iframe="true"]');
-            oldPagifyIframes.forEach(iframe => {
-                iframe.remove();
+            const oldPagifyIframes = container?.querySelectorAll('iframe[data-pagify-iframe="true"]') || [];
+            oldPagifyIframes?.forEach(iframe => {
+                iframe?.remove();
             });
         } else {
             container = document.body;
