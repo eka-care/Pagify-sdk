@@ -25,24 +25,11 @@ class PagifySDK {
         // Storage for callback functions indexed by instance ID
         this.callbackStorage = {};
         this.pdfCallbackStorage = {};
-        this.fetchPagedJS();
 
         // Initialize message listener
         this.initMessageListener();
     }
 
-    fetchPagedJS() {
-        if (typeof window !== 'undefined') {
-            if (document.querySelector('script[src*="paged.polyfill.js"]')) {
-                return;
-            }
-            
-            const script = document.createElement('script');
-            script.src = 'https://unpkg.com/pagedjs@0.4.3/dist/paged.polyfill.js';
-            script.async = true;
-            document.head.appendChild(script);
-        }
-    }
     
     /**
      * Initialize message listener for iframe communication
