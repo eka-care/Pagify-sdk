@@ -14,6 +14,8 @@ Try the interactive demo: **[https://eka-care.github.io/Pagify-sdk/](https://eka
 - 🖼️ **Base64 image support** - Offline-compatible image handling
 - 📱 **Cross-platform** - Works on desktop and mobile browsers
 - 🔧 **Easy integration** - Simple API with TypeScript support
+- 👁️ **Preview mode** - View paginated layout without generating PDF
+- 🧹 **Automatic cleanup** - Prevents memory leaks from zombie iframes
 
 ## Installation
 
@@ -63,6 +65,22 @@ await pagify.render({
 </script>
 ```
 
+### Preview Mode
+
+```javascript
+// Show preview without generating PDF (faster)
+await pagify.render({
+    body_html: '<h1>Preview Content</h1>',
+    containerSelector: '#preview-container',
+    isViewOnlySkipMakingPDF: true,
+    onPreviewReady: (result) => {
+        if (result.success) {
+            console.log('Preview ready');
+        }
+    }
+});
+```
+
 ## API Reference
 
 ### `pagify.render(options)`
@@ -83,8 +101,10 @@ Renders HTML content as a paginated PDF.
 | `header_height` | `string` | `"0mm"` | Height reserved for header |
 | `footer_height` | `string` | `"0mm"` | Height reserved for footer |
 | `containerSelector` | `string` | `null` | CSS selector for preview container |
-| `onPdfReady` | `function` | `null` | Callback when PDF is ready |
-| `onPdfError` | `function` | `null` | Callback when PDF generation fails |
+| `isViewOnlySkipMakingPDF` | `boolean` | `false` | If true, only renders preview without generating PDF |
+| `onPdfReady` | `function` | `null` | Callback when PDF is ready (receives blobUrl) |
+| `onPdfError` | `function` | `null` | Callback when PDF generation fails (receives error) |
+| `onPreviewReady` | `function` | `null` | Callback when preview completes (receives {success, error?}) |
 
 #### Example with Advanced Styling
 
@@ -140,6 +160,42 @@ await pagify.render({
         document.body.appendChild(link);
     }
 });
+```
+
+#### Example with Preview Mode
+
+```javascript
+// Step 1: Show only preview and do not make PDF
+await pagify.render({
+    body_html: '<h1>Invoice #12345</h1>',
+    header_html: '<div>Company Header</div>',
+    footer_html: '<div>Page <span class="pageNumber"></span></div>',
+    containerSelector: '#preview-container',
+    isViewOnlySkipMakingPDF: true,
+    onPreviewReady: ({ success, error }) => {
+        if (success) {
+            // caller/invoker/application layer does their flows
+        } else {
+            console.error('Preview failed:', error);
+        }
+    }
+});
+
+
+document.getElementById('download-btn').onclick = async () => {
+    await pagify.render({
+        body_html: '<h1>Invoice #12345</h1>',
+        header_html: '<div>Company Header</div>',
+        footer_html: '<div>Page <span class="pageNumber"></span></div>',
+        // isViewOnlySkipMakingPDF: true, --> not passing this makes the PDF and the cb to watch for is onPdfReady when this is not passed and when its passed  onPreviewReady. 
+        onPdfReady: (blobUrl) => {
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = 'invoice.pdf';
+            link.click();
+        }
+    });
+};
 ```
 
 ### `pagify.generatePDF(options)`
