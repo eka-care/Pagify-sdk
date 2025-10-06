@@ -155,6 +155,7 @@ class PagifySDK {
      * @param {function} options.onPdfError - Callback when PDF generation fails (receives error)
      * @param {string} options.containerSelector - CSS selector for container element
      * @param {boolean} options.isViewOnlySkipMakingPDF - If true, only render preview without generating PDF
+     * @param {function} options.onPreviewReady - Callback when in preview only mode, fired on iframe ready in DOM (receives {success: boolean, error?: string})
      * @returns {Promise<void>}
      */
     async render({
