@@ -574,7 +574,7 @@ class PagifySDK {
                     console.log('Estimated pages:', totalPages);
                     
                     const opt = {
-                        margin: 0,
+                        margin: [0,0,0,0],
                         filename: "document.pdf",
                         image: { 
                             type: "jpeg", 
