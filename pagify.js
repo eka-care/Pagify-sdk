@@ -460,11 +460,15 @@ class PagifySDK {
                                     }
                                 }
                             });
-                            // setting the page to show overflowing content
-                            let contents = pageElement.querySelectorAll(".pagedjs_page_content");
-                            contents.forEach((content) => {
-                                content.style.height = 'max-content';
-                            });
+                            try {
+                                // setting the page to show overflowing content
+                                let contents = pageElement.querySelectorAll(".pagedjs_page_content");
+                                contents.forEach((content) => {
+                                    content.style.height = 'max-content';
+                                });
+                            } catch (e) {
+                                console.warn("Failed to set page content height to max-content", e);
+                            }
                         }
                     }
                     registerHandlers(RepeatingTableHeaders);
@@ -501,16 +505,16 @@ class PagifySDK {
                     
                 if (${isViewOnlySkipMakingPDF}) {
                     window.parent.postMessage({ 
-                        type: "PREVIEW_ERROR",
-                        error: "Failed to initialize Paged.js: " + error.message,
-                        iter: ${instanceId}
-                    }, "*");
+                            type: "PREVIEW_ERROR",
+                            error: "Failed to initialize Paged.js: " + error.message,
+                            iter: ${instanceId}
+                        }, "*");
                     } else {
-                    window.parent.postMessage({ 
-                        type: "PDF_ERROR", 
-                        error: "Failed to initialize Paged.js: " + error.message,
-                        iter: ${instanceId}
-                    }, "*");
+                        window.parent.postMessage({
+                            type: "PDF_ERROR",
+                            error: "Failed to initialize Paged.js: " + error.message,
+                            iter: ${instanceId}
+                        }, "*");
                     }
                 }
             });
