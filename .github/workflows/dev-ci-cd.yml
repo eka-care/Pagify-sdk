@@ -1,0 +1,65 @@
+name: pagify-dev-s3-deploy
+
+on:
+  push:
+    tags:
+      - pagify-dev-*
+
+jobs:
+  build-and-deploy:
+    runs-on: dev-runner-server
+    permissions:
+      id-token: write   
+      contents: read 
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+      
+      - name: Get the build version
+        id: get_build_version
+        run: |
+          FULL_TAG=$(echo $GITHUB_REF | cut -d / -f 3)
+          VERSION=${FULL_TAG#pagify-dev-}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: iam role for the github runner
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        with:
+          role-to-assume: arn:aws:iam::607765814920:role/github-runner-role
+          role-session-name: runner-role
+          aws-region: ${{ secrets.DEV_AWS_Region }}
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18.x'
+
+      - name: npm install
+        run: npm install
+
+
+      - name: Build JS
+        env:
+          NODE_ENV: production
+        run: npm run build
+
+      - name: Push to s3 bucket
+        env:
+          BUCKET_LOCATION: elixir-dr-dev
+        run: |
+          aws s3 sync $PWD/src/dist/ s3://$BUCKET_LOCATION/main/pagify/main/
+          aws s3 sync $PWD/src/dist/ s3://$BUCKET_LOCATION/main/pagify/${{ steps.get_build_version.outputs.VERSION }}/
+
+      - name: Clean up
+        if: always()
+        run: |
+          echo "Deployment completed"
+
+  Invalidate-Cache:
+    needs: build-and-deploy
+    runs-on: dev-runner-server
+    steps:
+      - name: Invalidating Cache
+        run: |
+          echo 'CD Completed, Invalidating Cache'
+          aws cloudfront create-invalidation --distribution-id ERYGWO56QYEYB --paths "/*"
+          aws cloudfront create-invalidation --distribution-id E2MUDDS4SQLH7S --paths "/*"
