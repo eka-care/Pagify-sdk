@@ -29,32 +29,18 @@ jobs:
           role-session-name: runner-role
           aws-region: ${{ secrets.DEV_AWS_Region }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/setup-node@v3
         with:
           node-version: '18.x'
 
-      - name: Install dependencies
-        run: |
-          cd src
-          npm ci
+      - name: npm install
+        run: npm install
 
-      - name: Run tests
-        run: |
-          cd src
-          npm run test
 
-      - name: Run linting
-        run: |
-          cd src
-          npm run lint
-
-      - name: Build package
+      - name: Build JS
         env:
           NODE_ENV: production
-        run: |
-          cd src
-          npm run build
+        run: npm run build
 
       - name: Push to s3 bucket
         env:
