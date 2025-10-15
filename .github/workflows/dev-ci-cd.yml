@@ -64,10 +64,18 @@ jobs:
   Invalidate-Cache:
     needs: build-and-deploy
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        with:
+         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+         aws-region: ${{ secrets.AWS_REGION }}
+         role-session-name: github-role
       - name: Invalidating Cache
         run: |
           echo 'CD Completed, Invalidating Cache'
-          aws cloudfront create-invalidation --distribution-id ${{ secrets.DISTRIBUTION1 }} --paths "/*"
-          aws cloudfront create-invalidation --distribution-id ${{ secrets.DISTRIBUTION2 }} --paths "/*"
-      
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.DEV_DISTRIBUTION }} --paths "/*"
+          
