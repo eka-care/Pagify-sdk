@@ -62,7 +62,4 @@ jobs:
           echo 'CD Completed, Invalidating Cache'
           aws cloudfront create-invalidation --distribution-id ${{ secrets.DISTRIBUTION1 }} --paths "/*"
           aws cloudfront create-invalidation --distribution-id ${{ secrets.DISTRIBUTION2 }} --paths "/*"
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DEV_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DEV_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+      
