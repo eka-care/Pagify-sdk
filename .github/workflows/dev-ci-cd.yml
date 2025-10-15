@@ -43,10 +43,15 @@ jobs:
          aws-region: ${{ secrets.AWS_REGION }}
          role-session-name: github-role
          
+      - name: see built files
+        run: |
+          ls -la dist/
+          echo "Build files:"
+          find dist/ -type f
       - name: Upload to S3
         run: |
-          aws s3 sync $PWD/src/dist/ s3://$BUCKET_LOCATION/main/pagify/main/
-          aws s3 sync $PWD/src/dist/ s3://$BUCKET_LOCATION/main/pagify/${{ steps.get_build_version.outputs.VERSION }}/
+          aws s3 sync $PWD/dist/ s3://$BUCKET_LOCATION/main/pagify/main/
+          aws s3 sync $PWD/dist/ s3://$BUCKET_LOCATION/main/pagify/${{ steps.get_build_version.outputs.VERSION }}/
         env:
           BUCKET_LOCATION: ${{ secrets.DEV_BUCKET_NAME }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
