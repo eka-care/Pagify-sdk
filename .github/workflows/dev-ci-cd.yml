@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-and-deploy:
-    runs-on: dev-runner-server
+    runs-on: ubuntu-latest
     permissions:
       id-token: write   
       contents: read 
@@ -22,12 +22,6 @@ jobs:
           VERSION=${FULL_TAG#pagify-dev-}
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: iam role for the github runner
-        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
-        with:
-          role-to-assume: arn:aws:iam::607765814920:role/github-runner-role
-          role-session-name: runner-role
-          aws-region: ${{ secrets.DEV_AWS_Region }}
 
       - uses: actions/setup-node@v3
         with:
@@ -42,13 +36,16 @@ jobs:
           NODE_ENV: production
         run: npm run build
 
-      - name: Push to s3 bucket
-        env:
-          BUCKET_LOCATION: elixir-dr-dev
+      - name: Upload to S3
         run: |
           aws s3 sync $PWD/src/dist/ s3://$BUCKET_LOCATION/main/pagify/main/
           aws s3 sync $PWD/src/dist/ s3://$BUCKET_LOCATION/main/pagify/${{ steps.get_build_version.outputs.VERSION }}/
-
+        env:
+          BUCKET_LOCATION: elixir-dr-dev
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-south-1
+          
       - name: Clean up
         if: always()
         run: |
@@ -56,10 +53,15 @@ jobs:
 
   Invalidate-Cache:
     needs: build-and-deploy
-    runs-on: dev-runner-server
+    runs-on: ubuntu-latest
     steps:
       - name: Invalidating Cache
         run: |
           echo 'CD Completed, Invalidating Cache'
           aws cloudfront create-invalidation --distribution-id ERYGWO56QYEYB --paths "/*"
           aws cloudfront create-invalidation --distribution-id E2MUDDS4SQLH7S --paths "/*"
+        env:
+          BUCKET_LOCATION: elixir-dr-dev
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-south-1
