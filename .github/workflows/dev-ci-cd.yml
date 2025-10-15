@@ -8,9 +8,6 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write   
-      contents: read 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
@@ -41,10 +38,10 @@ jobs:
           aws s3 sync $PWD/src/dist/ s3://$BUCKET_LOCATION/main/pagify/main/
           aws s3 sync $PWD/src/dist/ s3://$BUCKET_LOCATION/main/pagify/${{ steps.get_build_version.outputs.VERSION }}/
         env:
-          BUCKET_LOCATION: elixir-dr-dev
+          BUCKET_LOCATION: ${{ secrets.BUCKET_NAME }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ap-south-1
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           
       - name: Clean up
         if: always()
@@ -58,10 +55,9 @@ jobs:
       - name: Invalidating Cache
         run: |
           echo 'CD Completed, Invalidating Cache'
-          aws cloudfront create-invalidation --distribution-id ERYGWO56QYEYB --paths "/*"
-          aws cloudfront create-invalidation --distribution-id E2MUDDS4SQLH7S --paths "/*"
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.DISTRIBUTION1 }} --paths "/*"
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.DISTRIBUTION2 }} --paths "/*"
         env:
-          BUCKET_LOCATION: elixir-dr-dev
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ap-south-1
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_SECRETS_ACCESS_KEY }}
