@@ -38,10 +38,10 @@ jobs:
           aws s3 sync $PWD/src/dist/ s3://$BUCKET_LOCATION/main/pagify/main/
           aws s3 sync $PWD/src/dist/ s3://$BUCKET_LOCATION/main/pagify/${{ steps.get_build_version.outputs.VERSION }}/
         env:
-          BUCKET_LOCATION: ${{ secrets.BUCKET_NAME }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          BUCKET_LOCATION: ${{ secrets.DEV_BUCKET_NAME }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DEV_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DEV_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEV_SECRET_ACCESS_KEY }}
           
       - name: Clean up
         if: always()
@@ -58,6 +58,6 @@ jobs:
           aws cloudfront create-invalidation --distribution-id ${{ secrets.DISTRIBUTION1 }} --paths "/*"
           aws cloudfront create-invalidation --distribution-id ${{ secrets.DISTRIBUTION2 }} --paths "/*"
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ secrets.AWS_SECRETS_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DEV_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DEV_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEV_SECRET_ACCESS_KEY }}
