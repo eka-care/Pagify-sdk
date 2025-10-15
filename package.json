@@ -19,7 +19,10 @@
     "prepublishOnly": "npm run build",
     "test": "jest",
     "lint": "eslint src/**/*.js",
-    "lint:fix": "eslint src/**/*.js --fix"
+    "lint:fix": "eslint src/**/*.js --fix",
+    "pagify:deploy:dev": "bash scripts/deploy-dev.sh",
+    "pagify:deploy:prod": "bash scripts/deploy-prod.sh",
+    "pagify:deploy:all": "bash scripts/deploy-all.sh"
   },
   "keywords": [
     "pdf",
