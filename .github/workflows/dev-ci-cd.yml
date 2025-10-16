@@ -1,0 +1,81 @@
+name: pagify-dev-s3-deploy
+
+on:
+  push:
+    tags:
+      - pagify-dev-*
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+      
+      - name: Get the build version
+        id: get_build_version
+        run: |
+          FULL_TAG=$(echo $GITHUB_REF | cut -d / -f 3)
+          VERSION=${FULL_TAG#pagify-dev-}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18.x'
+
+      - name: npm install
+        run: npm install
+
+
+      - name: Build JS
+        env:
+          NODE_ENV: production
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+         aws-region: ${{ secrets.AWS_REGION }}
+         role-session-name: github-role
+         
+      - name: see built files
+        run: |
+          ls -la dist/
+          echo "Build files:"
+          find dist/ -type f
+      - name: Upload to S3
+        run: |
+          aws s3 sync $PWD/dist/ s3://$BUCKET_LOCATION/main/pagify/main/
+          aws s3 sync $PWD/dist/ s3://$BUCKET_LOCATION/main/pagify/${{ steps.get_build_version.outputs.VERSION }}/
+        env:
+          BUCKET_LOCATION: ${{ secrets.DEV_BUCKET_NAME }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+          
+      - name: Clean up
+        if: always()
+        run: |
+          echo "Deployment completed"
+
+  Invalidate-Cache:
+    needs: build-and-deploy
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+         aws-region: ${{ secrets.AWS_REGION }}
+         role-session-name: github-role
+      - name: Invalidating Cache
+        run: |
+          echo 'CD Completed, Invalidating Cache'
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.DEV_DISTRIBUTION }} --paths "/*"
+          
