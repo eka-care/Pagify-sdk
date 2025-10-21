@@ -609,7 +609,7 @@ class PagifySDK {
                     });
 
                     console.log('Using body element for PDF generation');
-                    console.log('Element innerHTML length:', targetElement.innerHTML.length);
+                    console.log('Element innerHTML length:', clonedBody.innerHTML.length);
                     
                     if (!clonedBody || clonedBody.innerHTML.trim().length === 0) {
                         throw new Error('No content found in cloned body element');
