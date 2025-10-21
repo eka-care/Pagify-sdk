@@ -156,6 +156,7 @@ class PagifySDK {
      * @param {string} options.containerSelector - CSS selector for container element
      * @param {boolean} options.isViewOnlySkipMakingPDF - If true, only render preview without generating PDF
      * @param {function} options.onPreviewReady - Callback when in preview only mode, fired on iframe ready in DOM (receives {success: boolean, error?: string})
+     * @param {boolean} options.beautifyListItems - If true, apply bullet point fixes to list items (default: true)
      * @returns {Promise<void>}
      */
     async render({
@@ -177,6 +178,7 @@ class PagifySDK {
         containerSelector = null,
         isViewOnlySkipMakingPDF = false,
         onPreviewReady = null,
+        beautifyListItems = true,
     }) {
         try {
             // Generate unique instance ID
@@ -222,6 +224,7 @@ class PagifySDK {
                 page_padding_top,
                 pageNumberCSS,
                 isViewOnlySkipMakingPDF,
+                beautifyListItems,
             });
 
             // Create and configure iframe
@@ -258,6 +261,7 @@ class PagifySDK {
         page_padding_top,
         pageNumberCSS,
         isViewOnlySkipMakingPDF,
+        beautifyListItems,
     }) {
         return `
             <html>
@@ -274,7 +278,7 @@ class PagifySDK {
                         let totalPages;
                         let isViewOnly = ${isViewOnlySkipMakingPDF};
                         
-                        ${!isViewOnlySkipMakingPDF ? `${this.getPdfGenerationScript(instanceId)}` : ''}
+                        ${!isViewOnlySkipMakingPDF ? `${this.getPdfGenerationScript(instanceId, beautifyListItems)}` : ''}
                         function initializePagination() {
                             ${this.getPagedJSInitScript(instanceId, isViewOnlySkipMakingPDF)}
                         }
@@ -524,8 +528,60 @@ class PagifySDK {
     /**
      * Get PDF generation script
      */
-    getPdfGenerationScript(instanceId) {
+    getPdfGenerationScript(instanceId, beautifyListItems = true) {
         return `
+            function getBulletChar(listStyleType) {
+                const bulletMap = {
+                    'disc': '•',
+                    'circle': '○',
+                    'square': '▪',
+                    'none': '',
+                };
+                return bulletMap[listStyleType] || '•';
+            }
+
+            function beautifyListItemsHandler(originalBody) {
+                try {
+                    const clonedBody = originalBody?.cloneNode?.(true);
+                    if (!clonedBody) return originalBody;
+
+                    clonedBody?.querySelectorAll?.('ul, ol')?.forEach?.((list) => {
+                        list?.querySelectorAll?.('li')?.forEach?.((li) => {
+                            const originalLi = originalBody?.querySelector?.(\`[data-ref="\${li?.getAttribute?.('data-ref')}"]\`) || li;
+                            const computedStyle = window?.getComputedStyle?.(originalLi);
+                            
+                            if (computedStyle?.listStyleType !== 'none') {
+                                li.style.listStyleType = 'none';
+                                li.style.position = 'relative';
+                                li.style.paddingLeft = '-1.2em';
+                                li.style.paddingTop = '-0.3em';
+                                
+                                const bullet = document?.createElement?.('span');
+                                if (bullet) {
+                                    bullet.textContent = getBulletChar(computedStyle?.listStyleType);
+                                    bullet.style.cssText = \`
+                                        position: absolute;
+                                        left: -1.4em;
+                                        top: -0.28em;
+                                        line-height: 1.25rem;
+                                        font-size: 1.2em;
+                                        font-weight: bold;
+                                        color: currentColor;
+                                    \`;
+                                    
+                                    li?.insertBefore?.(bullet, li?.firstChild);
+                                }
+                            }
+                        });
+                    });
+
+                    return clonedBody;
+                } catch (error) {
+                    console.error('beautifyListItemsHandler failed:', error);
+                    return originalBody;
+                }
+            }
+
             // Generate PDF blob function
             async function generatePdfBlob() {
                 try {
@@ -567,11 +623,17 @@ class PagifySDK {
 
             async function startPdfGeneration() {
                 try {
-                    const targetElement = document.body;
+                    const originalBody = document.body;
+                    let targetElement = originalBody;
+
+                    if (${beautifyListItems}) {
+                        targetElement = beautifyListItemsHandler(originalBody);
+                    }
+
                     console.log('Using body element for PDF generation');
-                    console.log('Element innerHTML length:', targetElement.innerHTML.length);
+                    console.log('Element innerHTML length:', targetElement?.innerHTML?.length);
                     
-                    if (!targetElement || targetElement.innerHTML.trim().length === 0) {
+                    if (!targetElement || targetElement?.innerHTML?.trim()?.length === 0) {
                         throw new Error('No content found in body element');
                     }
                     
