@@ -19,7 +19,7 @@ jobs:
         id: get_build_version
         run: |
           FULL_TAG=$(echo $GITHUB_REF | cut -d / -f 3)
-          VERSION=${FULL_TAG#pagify-beta-prod-}
+          VERSION=${FULL_TAG#pagify-beta-}
           VERSION="${VERSION}-beta"
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
@@ -58,3 +58,21 @@ jobs:
       - name: Clean up
         if: always()
         run: echo "Beta Deployment completed"
+
+  Invalidate-Cache:
+    needs: build-and-deploy
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+         role-to-assume: ${{ secrets.PROD_AWS_ROLE_ARN }}
+         aws-region: ${{ secrets.AWS_REGION }}
+         role-session-name: github-role
+      - name: Invalidating Cache
+        run: |
+          echo 'CD Completed, Invalidating Cache'
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.PROD_DISTRIBUTION }} --paths "/*"
