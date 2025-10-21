@@ -526,6 +526,16 @@ class PagifySDK {
      */
     getPdfGenerationScript(instanceId) {
         return `
+            function getBulletChar(listStyleType) {
+                const bulletMap = {
+                    'disc': '•',
+                    'circle': '○',
+                    'square': '▪',
+                    'none': '',
+                };
+                return bulletMap[listStyleType] || '•';
+            }
+
             // Generate PDF blob function
             async function generatePdfBlob() {
                 try {
@@ -567,12 +577,42 @@ class PagifySDK {
 
             async function startPdfGeneration() {
                 try {
-                    const targetElement = document.body;
+                    const originalBody = document.body;
+                    const clonedBody = originalBody.cloneNode(true);
+
+                    clonedBody.querySelectorAll('ul, ol').forEach((list) => {
+                        list.querySelectorAll('li').forEach((li) => {
+                            const originalLi = originalBody.querySelector(\`[data-ref="\${li.getAttribute('data-ref')}"]\`) || li;
+                            const computedStyle = window.getComputedStyle(originalLi);
+                            
+                            if (computedStyle.listStyleType !== 'none') {
+                                li.style.listStyleType = 'none';
+                                li.style.position = 'relative';
+                                li.style.paddingLeft = '-1.2em';
+                                li.style.paddingTop = '-0.3em';
+                                
+                                const bullet = document.createElement('span');
+                                bullet.textContent = getBulletChar(computedStyle.listStyleType);
+                                bullet.style.cssText = \`
+                                    position: absolute;
+                                    left: -1.4em;
+                                    top: -0.28em;
+                                    line-height: 1.25rem;
+                                    font-size: 1.2em;
+                                    font-weight: bold;
+                                    color: currentColor;
+                                \`;
+                                
+                                li.insertBefore(bullet, li.firstChild);
+                            }
+                        });
+                    });
+
                     console.log('Using body element for PDF generation');
                     console.log('Element innerHTML length:', targetElement.innerHTML.length);
                     
-                    if (!targetElement || targetElement.innerHTML.trim().length === 0) {
-                        throw new Error('No content found in body element');
+                    if (!clonedBody || clonedBody.innerHTML.trim().length === 0) {
+                        throw new Error('No content found in cloned body element');
                     }
                     
                     console.log('Estimated pages:', totalPages);
@@ -598,9 +638,9 @@ class PagifySDK {
                         }
                     };
                     
-                    console.log('Starting html2pdf conversion with body element');
+                    console.log('Starting html2pdf conversion with cloned body');
                     
-                    window.html2pdf().set(opt).from(targetElement)
+                    window.html2pdf().set(opt).from(clonedBody)
                         .toPdf()
                         .get("pdf").then(pdf => {
                             const pageCount = pdf.internal.getNumberOfPages();
