@@ -278,9 +278,9 @@ class PagifySDK {
                         let totalPages;
                         let isViewOnly = ${isViewOnlySkipMakingPDF};
                         
-                        ${!isViewOnlySkipMakingPDF ? `${this.getPdfGenerationScript(instanceId, beautifyListItems)}` : ''}
+                        ${!isViewOnlySkipMakingPDF ? `${this.getPdfGenerationScript(instanceId, beautifyListItems,page_size)}` : ''}
                         function initializePagination() {
-                            ${this.getPagedJSInitScript(instanceId, isViewOnlySkipMakingPDF)}
+                            ${this.getPagedJSInitScript(instanceId, isViewOnlySkipMakingPDF,page_size)}
                         }
                     <\/script>
                     <script src="https://unpkg.com/pagedjs@0.4.3/dist/paged.polyfill.js" onload="initializePagination()"><\/script>
@@ -332,7 +332,7 @@ class PagifySDK {
                             margin-right: ${margin_right};
                             margin-top: ${header_height};
                             margin-bottom: ${footer_height};
-                            size: ${page_size};
+                            size: ${page_size.split(" ")?.at(0)};
                         
                             @bottom-center {
                                 content: element(footer);
@@ -396,7 +396,7 @@ class PagifySDK {
     /**
      * Get Paged.js initialization script
      */
-    getPagedJSInitScript(instanceId, isViewOnlySkipMakingPDF) {
+    getPagedJSInitScript(instanceId, isViewOnlySkipMakingPDF,page_size) {
         return `
             // Wait for fonts to load before starting pagination
             document.fonts.ready.then(async () => {
@@ -500,7 +500,7 @@ class PagifySDK {
                     } else {
                         // PDF generation mode
                         if (typeof generatePdfBlob === "function") { 
-                            generatePdfBlob(); 
+                            generatePdfBlob('${page_size}'); 
                         }
                     }
                     
@@ -583,7 +583,7 @@ class PagifySDK {
             }
 
             // Generate PDF blob function
-            async function generatePdfBlob() {
+            async function generatePdfBlob(page_size) {
                 try {
                     console.log('Starting PDF generation...');
                     
@@ -609,7 +609,7 @@ class PagifySDK {
                     
                     html2pdfLib = window.html2pdf;
                     console.log('html2pdf loaded successfully');
-                    await startPdfGeneration();
+                    await startPdfGeneration(page_size);
         
                 } catch (error) {
                     console.error("PDF generation error:", error);
@@ -621,7 +621,7 @@ class PagifySDK {
                 }
             }
 
-            async function startPdfGeneration() {
+            async function startPdfGeneration(page_size) {
                 try {
                     const originalBody = document.body;
                     let targetElement = originalBody;
@@ -655,7 +655,7 @@ class PagifySDK {
                         jsPDF: { 
                             unit: "mm", 
                             format: "a4", 
-                            orientation: "portrait",
+                            orientation: page_size.split(" ")?.at(1)?page_size.split(" ")?.at(1):"portrait",
                             compress: true
                         }
                     };
