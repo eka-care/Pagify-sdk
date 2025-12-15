@@ -332,7 +332,7 @@ class PagifySDK {
                             margin-right: ${margin_right};
                             margin-top: ${header_height};
                             margin-bottom: ${footer_height};
-                            size: ${page_size};
+                            size: ${page_size.split(" ")?.at(0)};
                         
                             @bottom-center {
                                 content: element(footer);
@@ -655,7 +655,7 @@ class PagifySDK {
                         jsPDF: { 
                             unit: "mm", 
                             format: "a4", 
-                            orientation: "portrait",
+                            orientation: ${page_size.split(" ")?.at(1)?page_size.split(" ")?.at(1):"portrait"},
                             compress: true
                         }
                     };
