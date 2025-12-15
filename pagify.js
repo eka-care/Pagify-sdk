@@ -500,7 +500,7 @@ class PagifySDK {
                     } else {
                         // PDF generation mode
                         if (typeof generatePdfBlob === "function") { 
-                            generatePdfBlob(${page_size}); 
+                            generatePdfBlob('${page_size}'); 
                         }
                     }
                     
