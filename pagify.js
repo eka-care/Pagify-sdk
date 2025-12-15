@@ -278,7 +278,7 @@ class PagifySDK {
                         let totalPages;
                         let isViewOnly = ${isViewOnlySkipMakingPDF};
                         
-                        ${!isViewOnlySkipMakingPDF ? `${this.getPdfGenerationScript(instanceId, beautifyListItems)}` : ''}
+                        ${!isViewOnlySkipMakingPDF ? `${this.getPdfGenerationScript(instanceId, beautifyListItems,page_size)}` : ''}
                         function initializePagination() {
                             ${this.getPagedJSInitScript(instanceId, isViewOnlySkipMakingPDF)}
                         }
@@ -528,7 +528,7 @@ class PagifySDK {
     /**
      * Get PDF generation script
      */
-    getPdfGenerationScript(instanceId, beautifyListItems = true) {
+    getPdfGenerationScript(instanceId, beautifyListItems = true,page_size) {
         return `
             function getBulletChar(listStyleType) {
                 const bulletMap = {
