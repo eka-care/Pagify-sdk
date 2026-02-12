@@ -76,4 +76,4 @@ jobs:
       - name: Invalidating Cache
         run: |
           echo 'CD Completed, Invalidating Cache'
-          aws cloudfront create-invalidation --distribution-id ${{ secrets.PROD_DISTRIBUTION }} --paths "/*"
+          aws cloudfront create-invalidation --distribution-id EQBEV8J9LOT10 --paths "/*"
