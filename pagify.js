@@ -17,6 +17,8 @@ import html2pdf from 'html2pdf.js';
  * Pagify SDK Class
  * Handles PDF rendering with pagination using Paged.js and html2pdf.js
  */
+const pagifyIframeIdentifier = 'iframe[data-pagify-iframe="true"]';
+
 class PagifySDK {
     constructor() {
         // Counter for unique iframe instances
@@ -730,6 +732,20 @@ class PagifySDK {
         return iframe;
     }
 
+    cleanupIframesOnContainerLevel(container) {
+        const oldPagifyIframes = container?.querySelectorAll(pagifyIframeIdentifier) || [];
+        oldPagifyIframes?.forEach(iframe => {
+            iframe?.remove();
+        });
+    }
+
+    cleanupIframesOnDOMLevel() {
+        const oldPagifyIframes = document?.querySelectorAll(pagifyIframeIdentifier) || [];
+        oldPagifyIframes?.forEach(iframe => {
+            iframe?.remove();
+        });
+    }
+
     /**
      * Get container element for iframe
      */
@@ -741,12 +757,10 @@ class PagifySDK {
                 console.warn(`Container with selector "${containerSelector}" not found. Using document.body instead.`);
                 container = document.body;
             }
-            const oldPagifyIframes = container?.querySelectorAll('iframe[data-pagify-iframe="true"]') || [];
-            oldPagifyIframes?.forEach(iframe => {
-                iframe?.remove();
-            });
+            this.cleanupIframesOnContainerLevel(container);
         } else {
             container = document.body;
+            this.cleanupIframesOnDOMLevel();
         }
         return container;
     }
