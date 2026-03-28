@@ -50,6 +50,18 @@ export interface PagifyOptions {
   
   /** CSS selector for container element (optional) */
   containerSelector?: string;
+  
+  /** If true, only render preview without generating PDF */
+  isViewOnlySkipMakingPDF?: boolean;
+  
+  /** Callback when in preview only mode, fired on iframe ready in DOM */
+  onPreviewReady?: (result: { success: boolean; error?: string }) => void;
+  
+  /** If true, apply bullet point fixes to list items (default: true) */
+  beautifyListItems?: boolean;
+  
+  /** Optional queue identifier for managing separate render queues (default: 'default') */
+  queueId?: string;
 }
 
 export interface PagificationResult {
@@ -63,9 +75,9 @@ export class PagifySDK {
   /**
    * Render HTML content as a paginated PDF
    * @param options Configuration options for PDF rendering
-   * @returns Promise that resolves when rendering starts
+   * @returns Promise that resolves with blobUrl (PDF mode) or result object (preview mode)
    */
-  render(options: PagifyOptions): Promise<void>;
+  render(options: PagifyOptions): Promise<string | { success: boolean; error?: string }>;
   
   /**
    * Direct PDF generation without iframe (for Node.js environments)
@@ -73,6 +85,12 @@ export class PagifySDK {
    * @returns Promise that resolves with PDF blob
    */
   generatePDF(options: PagifyOptions): Promise<Blob>;
+  
+  /**
+   * Manually clean up all pagify iframes
+   * Useful for cleanup in edge cases or manual management
+   */
+  cleanupAllIframes(): void;
 }
 
 declare const pagify: PagifySDK;

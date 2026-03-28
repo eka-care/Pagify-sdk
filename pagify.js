@@ -27,9 +27,28 @@ class PagifySDK {
         // Storage for callback functions indexed by instance ID
         this.callbackStorage = {};
         this.pdfCallbackStorage = {};
+        
+        // Queue tracking: { queueId: Promise } - ensures sequential execution per queue
+        this.renderQueues = {};
 
         // Initialize message listener
         this.initMessageListener();
+    }
+    
+    /**
+     * Get queue-specific iframe selector
+     */
+    getQueueSelector(queueId) {
+        return `iframe[data-pagify-iframe="true"][data-pagify-queue="${queueId}"]`;
+    }
+    
+    /**
+     * Clean up all iframes for a specific queue
+     */
+    cleanupQueueIframes(queueId) {
+        const selector = this.getQueueSelector(queueId);
+        const iframes = document.querySelectorAll(selector);
+        iframes.forEach(iframe => iframe.remove());
     }
 
     
@@ -55,6 +74,9 @@ class PagifySDK {
                     if (instanceId && this.pdfCallbackStorage[instanceId]?.onPdfReady) {
                         this.pdfCallbackStorage[instanceId].onPdfReady(event.data.blobUrl);
                         delete this.pdfCallbackStorage[instanceId];
+                        
+                        // Clean up the iframe for this instance using DOM query
+                        this.cleanupIframeByInstanceId(instanceId);
                     }
                     
                     // Also trigger global PDF ready event for backward compatibility
@@ -71,6 +93,9 @@ class PagifySDK {
                     if (instanceId && this.pdfCallbackStorage[instanceId]?.onPdfError) {
                         this.pdfCallbackStorage[instanceId].onPdfError(event.data.error);
                         delete this.pdfCallbackStorage[instanceId];
+                        
+                        // Clean up the iframe for this instance using DOM query
+                        this.cleanupIframeByInstanceId(instanceId);
                     }
                     
                     // Also trigger global PDF error event for backward compatibility
@@ -85,6 +110,8 @@ class PagifySDK {
                             success: true
                         });
                         delete this.pdfCallbackStorage[instanceId];
+                        
+                        // Note: Don't clean up iframe for preview mode - user may want to see it
                     }
                     
                     // Also trigger global preview ready event for backward compatibility
@@ -101,6 +128,9 @@ class PagifySDK {
                             error: event.data.error
                         });
                         delete this.pdfCallbackStorage[instanceId];
+                        
+                        // Clean up the iframe for this instance on error using DOM query
+                        this.cleanupIframeByInstanceId(instanceId);
                     }
                     
                     window.dispatchEvent(new CustomEvent('previewError', { 
@@ -138,7 +168,8 @@ class PagifySDK {
     }
 
     /**
-     * Render HTML content as a paginated PDF
+     * Render HTML content as a paginated PDF with queue management
+     * Ensures sequential execution for renders with the same queueId
      * @param {Object} options - Configuration options for PDF rendering
      * @param {string} options.body_html - Main HTML content for the PDF body
      * @param {string} options.header_html - HTML content for page headers
@@ -159,9 +190,34 @@ class PagifySDK {
      * @param {boolean} options.isViewOnlySkipMakingPDF - If true, only render preview without generating PDF
      * @param {function} options.onPreviewReady - Callback when in preview only mode, fired on iframe ready in DOM (receives {success: boolean, error?: string})
      * @param {boolean} options.beautifyListItems - If true, apply bullet point fixes to list items (default: true)
-     * @returns {Promise<void>}
+     * @param {string} options.queueId - Optional queue identifier for managing separate render queues (default: 'default')
+     * @returns {Promise<string|object>} - Resolves with blobUrl (PDF mode) or result object (preview mode)
      */
-    async render({
+    async render(options) {
+        const queueId = options.queueId || 'default';
+        
+        // Wait for previous render in this queue to complete
+        if (this.renderQueues[queueId]) {
+            await this.renderQueues[queueId].catch(() => {}); // Ignore previous errors
+        }
+        
+        // Start new render and track it
+        const renderPromise = this._executeRender(options);
+        this.renderQueues[queueId] = renderPromise;
+        
+        // Clean up queue tracking after completion
+        renderPromise
+            .then(() => { delete this.renderQueues[queueId]; })
+            .catch(() => { delete this.renderQueues[queueId]; });
+        
+        return renderPromise;
+    }
+
+    /**
+     * Execute the actual render (internal method)
+     * @private
+     */
+    async _executeRender({
         body_html = "",
         header_html = "",
         footer_html = "",
@@ -181,27 +237,44 @@ class PagifySDK {
         isViewOnlySkipMakingPDF = false,
         onPreviewReady = null,
         beautifyListItems = true,
+        queueId = 'default',
     }) {
-        try {
-            // Generate unique instance ID
-            const instanceId = this.instanceCounter++;
+        const instanceId = this.instanceCounter++;
+        
+        // Clean up all iframes from this queue before starting
+        this.cleanupQueueIframes(queueId);
+        
+        return new Promise((resolve, reject) => {
+            try {
+                // Store callback for later execution
+                this.callbackStorage[instanceId] = callback;
 
-            // Store callback for later execution
-            this.callbackStorage[instanceId] = callback;
-
-            // Store PDF callbacks for later execution
-            if (onPdfReady || onPdfError) {
+                // Store PDF callbacks with promise resolution
+                const originalOnPdfReady = onPdfReady;
+                const originalOnPdfError = onPdfError;
+                const originalOnPreviewReady = onPreviewReady;
+                
                 this.pdfCallbackStorage[instanceId] = {
-                    onPdfReady: onPdfReady,
-                    onPdfError: onPdfError
+                    onPdfReady: (blobUrl) => {
+                        if (originalOnPdfReady) originalOnPdfReady(blobUrl);
+                        resolve(blobUrl);
+                    },
+                    onPdfError: (error) => {
+                        if (originalOnPdfError) originalOnPdfError(error);
+                        reject(new Error(error));
+                    }
                 };
-            }
-            if (onPreviewReady) {
-                this.pdfCallbackStorage[instanceId] = {
-                    ...this.pdfCallbackStorage[instanceId],
-                    onPreviewReady: onPreviewReady
-                };
-            }
+                
+                if (originalOnPreviewReady) {
+                    this.pdfCallbackStorage[instanceId].onPreviewReady = (result) => {
+                        originalOnPreviewReady(result);
+                        if (result.success) {
+                            resolve(result);
+                        } else {
+                            reject(new Error(result.error || 'Preview failed'));
+                        }
+                    };
+                }
 
             // Generate page numbering CSS if selector is provided
             const pageNumberCSS = page_number_selector
@@ -231,18 +304,25 @@ class PagifySDK {
 
             // Create and configure iframe
             const iframe = this.createIframe(containerSelector);
+            // Add queue and instance identifiers for DOM-based cleanup
+            iframe.setAttribute('data-pagify-queue', queueId);
+            iframe.setAttribute('data-pagify-instance', instanceId);
             iframe.srcdoc = iframeHTML;
 
             // Insert iframe into specified container or body
             const container = this.getContainer(containerSelector);
             container.appendChild(iframe);
 
-        } catch (error) {
-            console.error("Pagify render error:", error);
-            if (onPdfError) {
-                onPdfError(error.message);
+            } catch (error) {
+                console.error("Pagify render error:", error);
+                
+                // Clean up iframe on error using DOM query
+                this.cleanupIframeByInstanceId(instanceId);
+                
+                // Reject the promise
+                reject(error);
             }
-        }
+        });
     }
 
     /**
@@ -732,18 +812,14 @@ class PagifySDK {
         return iframe;
     }
 
-    cleanupIframesOnContainerLevel(container) {
-        const oldPagifyIframes = container?.querySelectorAll(pagifyIframeIdentifier) || [];
-        oldPagifyIframes?.forEach(iframe => {
-            iframe?.remove();
-        });
-    }
-
-    cleanupIframesOnDOMLevel() {
-        const oldPagifyIframes = document?.querySelectorAll(pagifyIframeIdentifier) || [];
-        oldPagifyIframes?.forEach(iframe => {
-            iframe?.remove();
-        });
+    /**
+     * Clean up iframe for a specific instance ID using DOM query
+     */
+    cleanupIframeByInstanceId(instanceId) {
+        const iframe = document.querySelector(`iframe[data-pagify-instance="${instanceId}"]`);
+        if (iframe) {
+            iframe.remove();
+        }
     }
 
     /**
@@ -757,10 +833,8 @@ class PagifySDK {
                 console.warn(`Container with selector "${containerSelector}" not found. Using document.body instead.`);
                 container = document.body;
             }
-            this.cleanupIframesOnContainerLevel(container);
         } else {
             container = document.body;
-            this.cleanupIframesOnDOMLevel();
         }
         return container;
     }
@@ -775,27 +849,27 @@ class PagifySDK {
             throw new Error("Direct PDF generation is only available in browser environments");
         }
 
-        return new Promise(async (resolve, reject) => {
-            try {
-                const modifiedOptions = {
-                    ...options,
-                    onPdfReady: (blobUrl) => {
-                        // Convert blob URL back to blob
-                        fetch(blobUrl)
-                            .then(response => response.blob())
-                            .then(blob => resolve(blob))
-                            .catch(error => reject(error));
-                    },
-                    onPdfError: (error) => {
-                        reject(new Error(error));
-                    }
-                };
-
-                await this.render(modifiedOptions);
-            } catch (error) {
-                reject(error);
-            }
-        });
+        try {
+            // render() now returns a promise that resolves with blobUrl
+            const blobUrl = await this.render(options);
+            
+            // Convert blob URL to blob
+            const response = await fetch(blobUrl);
+            const blob = await response.blob();
+            
+            return blob;
+        } catch (error) {
+            throw error;
+        }
+    }
+    
+    /**
+     * Manually clean up all pagify iframes
+     * Useful for cleanup in edge cases or manual management
+     */
+    cleanupAllIframes() {
+        const allPagifyIframes = document.querySelectorAll('iframe[data-pagify-iframe="true"]');
+        allPagifyIframes.forEach(iframe => iframe.remove());
     }
 }
 
