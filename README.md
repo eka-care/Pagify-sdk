@@ -16,6 +16,8 @@ Try the interactive demo: **[https://eka-care.github.io/Pagify-sdk/](https://eka
 - 🔧 **Easy integration** - Simple API with TypeScript support
 - 👁️ **Preview mode** - View paginated layout without generating PDF
 - 🧹 **Automatic cleanup** - Prevents memory leaks from zombie iframes
+- 🔄 **Queue management** - Sequential execution per queue, parallel across queues
+- 🎯 **Promise-based API** - Modern async/await support with proper error handling
 
 ## Installation
 
@@ -36,13 +38,24 @@ Or via CDN:
 ```javascript
 import pagify from '@eka-care/pagify-sdk';
 
-// Generate a PDF
+// Generate a PDF with Promise-based API
+try {
+    const blobUrl = await pagify.render({
+        body_html: '<h1>Hello World!</h1><p>This is my first PDF.</p>',
+        header_html: '<div>Page Header</div>',
+        footer_html: '<div>Page <span class="pageNumber"></span></div>',
+    });
+    
+    // Display PDF in iframe or create download link
+    document.getElementById('pdf-viewer').src = blobUrl;
+} catch (error) {
+    console.error('PDF generation failed:', error);
+}
+
+// Or use callbacks (backward compatible)
 await pagify.render({
-    body_html: '<h1>Hello World!</h1><p>This is my first PDF.</p>',
-    header_html: '<div>Page Header</div>',
-    footer_html: '<div>Page <span class="pageNumber"></span></div>',
+    body_html: '<h1>Hello World!</h1>',
     onPdfReady: (blobUrl) => {
-        // Display PDF in iframe or create download link
         document.getElementById('pdf-viewer').src = blobUrl;
     },
     onPdfError: (error) => {
@@ -56,6 +69,19 @@ await pagify.render({
 ```html
 <script src="https://unpkg.com/@eka-care/pagify-sdk/dist/pagify.standalone.js"></script>
 <script>
+    // Using async/await
+    (async () => {
+        try {
+            const blobUrl = await window.pagify.render({
+                body_html: '<h1>Hello World!</h1>'
+            });
+            window.open(blobUrl, '_blank');
+        } catch (error) {
+            console.error('Failed:', error);
+        }
+    })();
+    
+    // Or using callbacks
     window.pagify.render({
         body_html: '<h1>Hello World!</h1>',
         onPdfReady: (blobUrl) => {
@@ -69,23 +95,25 @@ await pagify.render({
 
 ```javascript
 // Show preview without generating PDF (faster)
-await pagify.render({
-    body_html: '<h1>Preview Content</h1>',
-    containerSelector: '#preview-container',
-    isViewOnlySkipMakingPDF: true,
-    onPreviewReady: (result) => {
-        if (result.success) {
-            console.log('Preview ready');
-        }
-    }
-});
+try {
+    const result = await pagify.render({
+        body_html: '<h1>Preview Content</h1>',
+        containerSelector: '#preview-container',
+        isViewOnlySkipMakingPDF: true
+    });
+    console.log('Preview ready:', result);
+} catch (error) {
+    console.error('Preview failed:', error);
+}
 ```
 
 ## API Reference
 
 ### `pagify.render(options)`
 
-Renders HTML content as a paginated PDF.
+Renders HTML content as a paginated PDF. Returns a Promise that resolves with the blob URL (PDF mode) or result object (preview mode).
+
+**Returns:** `Promise<string | { success: boolean, error?: string }>`
 
 #### Options
 
@@ -102,14 +130,46 @@ Renders HTML content as a paginated PDF.
 | `footer_height` | `string` | `"0mm"` | Height reserved for footer |
 | `containerSelector` | `string` | `null` | CSS selector for preview container |
 | `isViewOnlySkipMakingPDF` | `boolean` | `false` | If true, only renders preview without generating PDF |
-| `onPdfReady` | `function` | `null` | Callback when PDF is ready (receives blobUrl) |
-| `onPdfError` | `function` | `null` | Callback when PDF generation fails (receives error) |
-| `onPreviewReady` | `function` | `null` | Callback when preview completes (receives {success, error?}) |
+| `onPdfReady` | `function` | `null` | Callback when PDF is ready (receives blobUrl). Optional - Promise also resolves with blobUrl |
+| `onPdfError` | `function` | `null` | Callback when PDF generation fails (receives error). Optional - Promise also rejects with error |
+| `onPreviewReady` | `function` | `null` | Callback when preview completes (receives {success, error?}). Optional - Promise also resolves/rejects |
+| `queueId` | `string` | `"default"` | Queue identifier for managing parallel renders. Renders with same queueId execute sequentially |
+
+### Queue Management
+
+Pagify includes a built-in queue system to manage concurrent renders:
+
+```javascript
+// Same queueId - renders execute sequentially (no interference)
+const [pdf1, pdf2] = await Promise.all([
+    pagify.render({ body_html: '<h1>Doc 1</h1>', queueId: 'reports' }),
+    pagify.render({ body_html: '<h1>Doc 2</h1>', queueId: 'reports' })
+]);
+// Second render waits for first to complete
+
+// Different queueIds - renders execute in parallel
+const [normalPdf, sendPdf] = await Promise.all([
+    pagify.render({ body_html: '<h1>Normal</h1>', queueId: 'normal' }),
+    pagify.render({ body_html: '<h1>Send</h1>', queueId: 'send' })
+]);
+// Both render simultaneously without interference
+
+// Default queue (if queueId not specified)
+const pdf = await pagify.render({ body_html: '<h1>Document</h1>' });
+// Uses queueId: 'default'
+```
+
+**Key Points:**
+- Renders with the **same queueId** execute sequentially
+- Renders with **different queueIds** execute in parallel
+- Default queueId is `'default'`
+- Prevents iframe conflicts and zombie iframes
+- Perfect for generating multiple PDFs safely
 
 #### Example with Advanced Styling
 
 ```javascript
-await pagify.render({
+const blobUrl = await pagify.render({
     head_html: `
         <style>
             @page {
@@ -150,68 +210,78 @@ await pagify.render({
         </div>
     `,
     header_height: "15mm",
-    footer_height: "15mm",
-    onPdfReady: (blobUrl) => {
-        // Create download link
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = 'report.pdf';
-        link.textContent = 'Download PDF';
-        document.body.appendChild(link);
-    }
+    footer_height: "15mm"
 });
+
+// Create download link
+const link = document.createElement('a');
+link.href = blobUrl;
+link.download = 'report.pdf';
+link.textContent = 'Download PDF';
+document.body.appendChild(link);
 ```
 
 #### Example with Preview Mode
 
 ```javascript
-// Step 1: Show only preview and do not make PDF
-await pagify.render({
-    body_html: '<h1>Invoice #12345</h1>',
-    header_html: '<div>Company Header</div>',
-    footer_html: '<div>Page <span class="pageNumber"></span></div>',
-    containerSelector: '#preview-container',
-    isViewOnlySkipMakingPDF: true,
-    onPreviewReady: ({ success, error }) => {
-        if (success) {
-            // caller/invoker/application layer does their flows
-        } else {
-            console.error('Preview failed:', error);
-        }
-    }
-});
-
-
-document.getElementById('download-btn').onclick = async () => {
-    await pagify.render({
+// Step 1: Show only preview (no PDF generation)
+try {
+    const result = await pagify.render({
         body_html: '<h1>Invoice #12345</h1>',
         header_html: '<div>Company Header</div>',
         footer_html: '<div>Page <span class="pageNumber"></span></div>',
-        // isViewOnlySkipMakingPDF: true, --> not passing this makes the PDF and the cb to watch for is onPdfReady when this is not passed and when its passed  onPreviewReady. 
-        onPdfReady: (blobUrl) => {
-            const link = document.createElement('a');
-            link.href = blobUrl;
-            link.download = 'invoice.pdf';
-            link.click();
-        }
+        containerSelector: '#preview-container',
+        isViewOnlySkipMakingPDF: true,
+        queueId: 'preview' // separate queue for preview
     });
+    console.log('Preview ready:', result.success);
+} catch (error) {
+    console.error('Preview failed:', error);
+}
+
+// Step 2: Generate actual PDF when user clicks download
+document.getElementById('download-btn').onclick = async () => {
+    try {
+        const blobUrl = await pagify.render({
+            body_html: '<h1>Invoice #12345</h1>',
+            header_html: '<div>Company Header</div>',
+            footer_html: '<div>Page <span class="pageNumber"></span></div>',
+            queueId: 'download' // separate queue for PDF generation
+        });
+        
+        // Download the PDF
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = 'invoice.pdf';
+        link.click();
+    } catch (error) {
+        console.error('PDF generation failed:', error);
+    }
 };
 ```
 
 ### `pagify.generatePDF(options)`
 
-Direct PDF generation that returns a Promise with the PDF blob.
+Direct PDF generation that returns a Promise with the PDF Blob (not blob URL).
+
+**Returns:** `Promise<Blob>`
 
 ```javascript
 try {
     const pdfBlob = await pagify.generatePDF({
         body_html: '<h1>Direct PDF Generation</h1>',
-        header_html: '<div>Header</div>'
+        header_html: '<div>Header</div>',
+        queueId: 'pdf-blob' // optional
     });
     
     // Use the blob directly
     const url = URL.createObjectURL(pdfBlob);
     window.open(url, '_blank');
+    
+    // Or upload to server
+    const formData = new FormData();
+    formData.append('pdf', pdfBlob, 'document.pdf');
+    await fetch('/upload', { method: 'POST', body: formData });
 } catch (error) {
     console.error('PDF generation failed:', error);
 }
@@ -267,6 +337,15 @@ For offline compatibility, use base64 encoded images:
 - [Paged.js](https://pagedjs.org/) - CSS paged media polyfill
 - [html2pdf.js](https://github.com/eKoopmans/html2pdf.js) - HTML to PDF conversion
 
+### `pagify.cleanupAllIframes()`
+
+Manually clean up all pagify iframes from the DOM.
+
+```javascript
+// Clean up all iframes (useful for spa cleanup on route change)
+pagify.cleanupAllIframes();
+```
+
 ## TypeScript Support
 
 Full TypeScript definitions included:
@@ -276,12 +355,21 @@ import pagify, { PagifyOptions, PagifySDK } from '@eka-care/pagify-sdk';
 
 const options: PagifyOptions = {
     body_html: '<h1>TypeScript Support</h1>',
+    queueId: 'ts-example',
     onPdfReady: (blobUrl: string) => {
         console.log('PDF ready:', blobUrl);
     }
 };
 
-await pagify.render(options);
+// Returns Promise<string | { success: boolean, error?: string }>
+const result = await pagify.render(options);
+
+// For PDF mode, result is the blob URL string
+if (typeof result === 'string') {
+    console.log('PDF URL:', result);
+} else {
+    console.log('Preview result:', result);
+}
 ```
 
 ## Development
