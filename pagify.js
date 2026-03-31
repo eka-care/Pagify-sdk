@@ -13,6 +13,15 @@
 import { Previewer } from 'pagedjs';
 import html2pdf from 'html2pdf.js';
 
+// Build-time constants injected by rollup via @rollup/plugin-replace.
+// Standalone build: _isStandalone=true, content strings inlined — zero CDN fetches.
+// ESM / UMD builds: _isStandalone=false, content=null — CDN fallback kept.
+/* eslint-disable no-undef */
+const _isStandalone = __PAGIFY_STANDALONE__;
+const _pagedJsContent = __PAGIFY_PAGEDJS_CONTENT__;
+const _html2pdfContent = __PAGIFY_HTML2PDF_CONTENT__;
+/* eslint-enable no-undef */
+
 /**
  * Pagify SDK Class
  * Handles PDF rendering with pagination using Paged.js and html2pdf.js
@@ -116,24 +125,30 @@ class PagifySDK {
      */
     loadHtml2PdfLibrary() {
         return new Promise((resolve, reject) => {
-            // Check if html2pdf is already available
             if (typeof window.html2pdf === 'function') {
                 resolve(window.html2pdf);
                 return;
             }
-            
-            // Create script tag to load html2pdf
-            const script = document.createElement('script');
-            script.src = 'https://unpkg.com/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js';
-            script.onload = () => {
-                if (typeof window.html2pdf === 'function') {
-                    resolve(window.html2pdf);
-                } else {
-                    reject(new Error('html2pdf not available after loading script'));
-                }
-            };
-            script.onerror = () => reject(new Error('Failed to load html2pdf script'));
-            document.head.appendChild(script);
+
+            if (_isStandalone) {
+                // Standalone: html2pdf is bundled — expose it on window and resolve.
+                // Terser constant-folds _isStandalone=true and removes the else branch.
+                window.html2pdf = html2pdf;
+                resolve(window.html2pdf);
+            } else {
+                // ESM / UMD: html2pdf is external — load from CDN.
+                const script = document.createElement('script');
+                script.src = 'https://unpkg.com/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js';
+                script.onload = () => {
+                    if (typeof window.html2pdf === 'function') {
+                        resolve(window.html2pdf);
+                    } else {
+                        reject(new Error('html2pdf not available after loading script'));
+                    }
+                };
+                script.onerror = () => reject(new Error('Failed to load html2pdf script'));
+                document.head.appendChild(script);
+            }
         });
     }
 
@@ -285,7 +300,13 @@ class PagifySDK {
                             ${this.getPagedJSInitScript(instanceId, isViewOnlySkipMakingPDF)}
                         }
                     <\/script>
-                    <script src="https://unpkg.com/pagedjs@0.4.3/dist/paged.polyfill.js" onload="initializePagination()"><\/script>
+                    ${_html2pdfContent && !isViewOnlySkipMakingPDF
+                        ? `<script>${_html2pdfContent.replace(/<\/script>/gi, '<\\/script>')}<\/script>`
+                        : ''}
+                    ${_pagedJsContent
+                        ? `<script>${_pagedJsContent.replace(/<\/script>/gi, '<\\/script>')}<\/script><script>initializePagination();<\/script>`
+                        : `<script src="https://unpkg.com/pagedjs@0.4.3/dist/paged.polyfill.js" onload="initializePagination()"><\/script>`
+                    }
                     <style>
                         /* Ensure print colors are preserved */
                         body {
@@ -588,14 +609,20 @@ class PagifySDK {
             async function generatePdfBlob() {
                 try {
                     console.log('Starting PDF generation...');
-                    
-                    let html2pdfLib;
+
+                    ${_html2pdfContent ? `
+                    // html2pdf was inlined at build time — already available as window.html2pdf.
+                    if (typeof window.html2pdf !== 'function') {
+                        throw new Error('html2pdf not available — standalone bundle may be corrupted');
+                    }
+                    console.log('html2pdf available (inlined at build time)');
+                    ` : `
                     await new Promise((resolve, reject) => {
                         if (typeof window.html2pdf === 'function') {
                             resolve();
                             return;
                         }
-                        
+
                         const script = document.createElement('script');
                         script.src = 'https://unpkg.com/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js';
                         script.onload = () => {
@@ -608,9 +635,8 @@ class PagifySDK {
                         script.onerror = () => reject(new Error('Failed to load html2pdf script'));
                         document.head.appendChild(script);
                     });
-                    
-                    html2pdfLib = window.html2pdf;
                     console.log('html2pdf loaded successfully');
+                    `}
                     await startPdfGeneration();
         
                 } catch (error) {
