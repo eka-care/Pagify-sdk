@@ -59,10 +59,19 @@ class PagifySDK {
             // fails intermittently. Draining the consumer first makes teardown
             try {
                 switch (data.type) {
-                    case "PDF_READY":
-                        await job.onPdfReady?.(data.blobUrl);
-                        window.dispatchEvent(new CustomEvent("pdfReady", { detail: { blobUrl: data.blobUrl } }));
+                    case "PDF_READY": {
+                        // if u make blob url in iframe the URL fies with the iframe
+                        // hence make url in pagify context
+                        // pagify ka GEC, is top level
+                        // HOST is also top level JS
+                        // hence we should make BLOB url in top level JS else when we rip off the iframe the bLOB url also wont open
+                        // and if callers have done, window.open or if caller does await fetch(blobUrl) or similar it'll fail mid BYTE
+                        const url = data.blob ? URL.createObjectURL(data.blob) : data.blobUrl;
+                        if (data.blob) job.blobUrl = url;
+                        await job.onPdfReady?.(url);
+                        window.dispatchEvent(new CustomEvent("pdfReady", { detail: { blobUrl: url } }));
                         break;
+                    }
                     case "PDF_ERROR":
                         console.error("PDF generation error:", data.error);
                         await job.onPdfError?.(data.error);
@@ -682,7 +691,8 @@ class PagifySDK {
                             window.parent.postMessage({ 
                                 type: "PDF_READY", 
                                 blobUrl: blobUrl,
-                                iter: "${instanceId}"
+                                iter: "${instanceId}",
+                                blob: blob
                             }, "*");
                         })
                         .catch(error => {
