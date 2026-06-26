@@ -51,21 +51,12 @@ class PagifySDK {
             // Only trust messages coming from this job's own iframe.
             if (event.source !== job.iframe.contentWindow) return;
 
-            // Only these are terminal events that consume the job + trigger teardown.
-            const isTerminal =
-                data.type === "PDF_READY" ||
-                data.type === "PDF_ERROR" ||
-                data.type === "PREVIEW_READY" ||
-                data.type === "PREVIEW_ERROR";
-            if (!isTerminal) return;
-
             // IMPORTANT: await the caller's callback before teardown.
             // The blobUrl is created with URL.createObjectURL INSIDE the iframe,
             // so it is revoked the moment the iframe is removed. A headless
             // caller does `await fetch(blobUrl)` to read the blob — if we reap
             // the iframe synchronously we revoke the URL mid-read and the fetch
             // fails intermittently. Draining the consumer first makes teardown
-            // deterministic. (try/catch so a throwing caller still gets reaped.)
             try {
                 switch (data.type) {
                     case "PDF_READY":
