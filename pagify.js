@@ -17,98 +17,75 @@ import html2pdf from 'html2pdf.js';
  * Pagify SDK Class
  * Handles PDF rendering with pagination using Paged.js and html2pdf.js
  */
-const pagifyIframeIdentifier = 'iframe[data-pagify-iframe="true"]';
-
 class PagifySDK {
     constructor() {
-        // Counter for unique iframe instances
-        this.instanceCounter = 1;
-
-        // Storage for callback functions indexed by instance ID
         this.callbackStorage = {};
-        this.pdfCallbackStorage = {};
+
+        // Active render jobs indexed by unique job id
+        // where each JOB is 1 pdf being generatting. PDF / view
+        this.jobs = {};
 
         // Initialize message listener
         this.initMessageListener();
     }
 
-    
+
     /**
      * Initialize message listener for iframe communication
      */
     initMessageListener() {
-        if (typeof window !== 'undefined') {
-            window.addEventListener("message", (event) => {
-                if (event.data?.type === "renderpdf") {
-                    const callback = this.callbackStorage[event.data?.iter];
-                    if (callback) {
-                        callback();
-                    }
-                    // Clean up callback storage
-                    delete this.callbackStorage[event.data?.iter];
-                } else if (event.data?.type === "PDF_READY") {
-                    // Handle PDF blob ready event
-                    console.log('PDF blob ready:', event.data.blobUrl);
-                    
-                    // Check if there's a specific callback for this instance
-                    const instanceId = event.data?.iter;
-                    if (instanceId && this.pdfCallbackStorage[instanceId]?.onPdfReady) {
-                        this.pdfCallbackStorage[instanceId].onPdfReady(event.data.blobUrl);
-                        delete this.pdfCallbackStorage[instanceId];
-                    }
-                    
-                    // Also trigger global PDF ready event for backward compatibility
-                    window.dispatchEvent(new CustomEvent('pdfReady', { 
-                        detail: { blobUrl: event.data.blobUrl } 
-                    }));
-                    
-                } else if (event.data?.type === "PDF_ERROR") {
-                    // Handle PDF generation error
-                    console.error('PDF generation error:', event.data.error);
-                    
-                    // Check if there's a specific callback for this instance
-                    const instanceId = event.data?.iter;
-                    if (instanceId && this.pdfCallbackStorage[instanceId]?.onPdfError) {
-                        this.pdfCallbackStorage[instanceId].onPdfError(event.data.error);
-                        delete this.pdfCallbackStorage[instanceId];
-                    }
-                    
-                    // Also trigger global PDF error event for backward compatibility
-                    window.dispatchEvent(new CustomEvent('pdfError', { 
-                        detail: { error: event.data.error } 
-                    }));
-                }
-                else if (event.data?.type === "PREVIEW_READY") {
-                    const instanceId = event.data?.iter;
-                    if (instanceId && this.pdfCallbackStorage[instanceId]?.onPreviewReady) {
-                        this.pdfCallbackStorage[instanceId].onPreviewReady({
-                            success: true
-                        });
-                        delete this.pdfCallbackStorage[instanceId];
-                    }
-                    
-                    // Also trigger global preview ready event for backward compatibility
-                    window.dispatchEvent(new CustomEvent('previewReady', { 
-                        detail: { success: true } 
-                    }));
-                } else if (event.data?.type === "PREVIEW_ERROR") {
-                    console.error('Preview error:', event.data.error);
-                    
-                    const instanceId = event.data?.iter;
-                    if (instanceId && this.pdfCallbackStorage[instanceId]?.onPreviewReady) {
-                        this.pdfCallbackStorage[instanceId].onPreviewReady({
-                            success: false,
-                            error: event.data.error
-                        });
-                        delete this.pdfCallbackStorage[instanceId];
-                    }
-                    
-                    window.dispatchEvent(new CustomEvent('previewError', { 
-                        detail: { success: false, error: event?.data?.error } 
-                    }));
-                }
-            }, false);
-        }
+        if (typeof window === "undefined") return;
+
+        window.addEventListener("message", (event) => {
+            const data = event?.data;
+            if (!data?.type) return;
+
+            if (data.type === "renderpdf") {
+                this.callbackStorage[data.iter]?.();
+                delete this.callbackStorage[data.iter];
+                return;
+            }
+
+            const job = this.jobs[data.iter];
+            if (!job) return;
+            // Only trust messages coming from this job's own iframe.
+            // govind
+            if (event.source !== job.iframe.contentWindow) return;
+
+            switch (data.type) {
+                case "PDF_READY":
+                    job.onPdfReady?.(data.blobUrl);
+                    window.dispatchEvent(new CustomEvent("pdfReady", { detail: { blobUrl: data.blobUrl } }));
+                    break;
+                case "PDF_ERROR":
+                    console.error("PDF generation error:", data.error);
+                    job.onPdfError?.(data.error);
+                    window.dispatchEvent(new CustomEvent("pdfError", { detail: { error: data.error } }));
+                    break;
+                case "PREVIEW_READY":
+                    job.onPreviewReady?.({ success: true });
+                    window.dispatchEvent(new CustomEvent("previewReady", { detail: { success: true } }));
+                    break;
+                case "PREVIEW_ERROR":
+                    console.error("Preview error:", data.error);
+                    job.onPreviewReady?.({ success: false, error: data.error });
+                    window.dispatchEvent(new CustomEvent("previewError", { detail: { success: false, error: data.error } }));
+                    break;
+                default:
+                    return;
+            }
+
+            // cleanup policy:
+            // - headless worker (no caller container): the iframe was only used to
+            //   produce the blob, so remove it now.
+            // - container-mounted (caller owns the visible view): keep the iframe;
+            //   the caller removes it via job.cleanup() on their own schedule.
+            if (job.hasContainer) {
+                job.onPdfReady = job.onPdfError = job.onPreviewReady = null; // prevent double-fire
+            } else {
+                this.destroyJob(data.iter);
+            }
+        }, false);
     }
 
     /**
@@ -121,7 +98,7 @@ class PagifySDK {
                 resolve(window.html2pdf);
                 return;
             }
-            
+
             // Create script tag to load html2pdf
             const script = document.createElement('script');
             script.src = 'https://unpkg.com/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js';
@@ -159,7 +136,10 @@ class PagifySDK {
      * @param {boolean} options.isViewOnlySkipMakingPDF - If true, only render preview without generating PDF
      * @param {function} options.onPreviewReady - Callback when in preview only mode, fired on iframe ready in DOM (receives {success: boolean, error?: string})
      * @param {boolean} options.beautifyListItems - If true, apply bullet point fixes to list items (default: true)
-     * @returns {Promise<void>}
+     * @returns {Promise<{id: string, cleanup: function, isAlive: function}>} job handle.
+     *   When a container is passed the iframe is the caller's view and is NOT auto-removed;
+     *   call handle.cleanup() on unmount to remove it. Headless (no container) jobs self-clean
+     *   once the blob is delivered.
      */
     async render({
         body_html = "",
@@ -183,25 +163,11 @@ class PagifySDK {
         beautifyListItems = true,
     }) {
         try {
-            // Generate unique instance ID
-            const instanceId = this.instanceCounter++;
+            // Unique job id so that we are stable, irrespective of caller using as singleton or multiple instances
+            const instanceId = this.generateJobId();
 
             // Store callback for later execution
             this.callbackStorage[instanceId] = callback;
-
-            // Store PDF callbacks for later execution
-            if (onPdfReady || onPdfError) {
-                this.pdfCallbackStorage[instanceId] = {
-                    onPdfReady: onPdfReady,
-                    onPdfError: onPdfError
-                };
-            }
-            if (onPreviewReady) {
-                this.pdfCallbackStorage[instanceId] = {
-                    ...this.pdfCallbackStorage[instanceId],
-                    onPreviewReady: onPreviewReady
-                };
-            }
 
             // Generate page numbering CSS if selector is provided
             const pageNumberCSS = page_number_selector
@@ -229,14 +195,39 @@ class PagifySDK {
                 beautifyListItems,
             });
 
-            // Create and configure iframe
-            const iframe = this.createIframe(containerSelector);
-            iframe.srcdoc = iframeHTML;
-
-            // Insert iframe into specified container or body
+            // Resolve mount target (container if found, else document.body)
             const container = this.getContainer(containerSelector);
+            const hasContainer = container !== document.body;
+
+            // LEARNING
+            // previoiusly we used to do document.querySelector all and cleanup
+            // this means callers could NEVER have 2 views side by side
+            // hence instead of document.querySelectorAll we move to  container.querySelectorAll
+            
+            // this executes before each innvocation so before rendering each view > this would run and clean up BUT NOT DOM scoped BUT CONTAINER SCOPED
+            if (hasContainer) {
+                container.querySelectorAll("iframe[data-pagify-job]").forEach((f) =>
+                    this.destroyJob(f.getAttribute("data-pagify-job"))
+                );
+            }
+
+            // Create, tag, and mount iframe
+            const iframe = this.createIframe(containerSelector);
+            iframe.setAttribute("data-pagify-job", instanceId);
+            iframe.srcdoc = iframeHTML;
             container.appendChild(iframe);
 
+            // Register job state (instance-scoped; no shared counter)
+            this.jobs[instanceId] = {
+                iframe,
+                hasContainer,
+                onPdfReady,
+                onPdfError,
+                onPreviewReady,
+            };
+
+            // Return a handle so the caller can tear down on their own schedule
+            return this.makeHandle(instanceId);
         } catch (error) {
             console.error("Pagify render error:", error);
             if (onPdfError) {
@@ -491,13 +482,13 @@ class PagifySDK {
                     // Notify parent window that rendering is complete
                     window.parent.postMessage({
                         type: "renderpdf", 
-                        iter: ${instanceId}
+                        iter: "${instanceId}"
                     }, "*");
 
                     if (${isViewOnlySkipMakingPDF}) {
                         window.parent.postMessage({ 
                             type: "PREVIEW_READY",
-                            iter: ${instanceId}
+                            iter: "${instanceId}"
                         }, "*");
                     } else {
                         // PDF generation mode
@@ -513,13 +504,13 @@ class PagifySDK {
                     window.parent.postMessage({ 
                             type: "PREVIEW_ERROR",
                             error: "Failed to initialize Paged.js: " + error.message,
-                            iter: ${instanceId}
+                            iter: "${instanceId}"
                         }, "*");
                     } else {
                         window.parent.postMessage({
                             type: "PDF_ERROR",
                             error: "Failed to initialize Paged.js: " + error.message,
-                            iter: ${instanceId}
+                            iter: "${instanceId}"
                         }, "*");
                     }
                 }
@@ -618,7 +609,7 @@ class PagifySDK {
                     window.parent.postMessage({ 
                         type: "PDF_ERROR", 
                         error: error.message,
-                        iter: ${instanceId}
+                        iter: "${instanceId}"
                     }, "*");
                 }
             }
@@ -684,7 +675,7 @@ class PagifySDK {
                             window.parent.postMessage({ 
                                 type: "PDF_READY", 
                                 blobUrl: blobUrl,
-                                iter: ${instanceId}
+                                iter: "${instanceId}"
                             }, "*");
                         })
                         .catch(error => {
@@ -692,7 +683,7 @@ class PagifySDK {
                             window.parent.postMessage({ 
                                 type: "PDF_ERROR", 
                                 error: error.message,
-                                iter: ${instanceId}
+                                iter: "${instanceId}"
                             }, "*");
                         });
                         
@@ -701,7 +692,7 @@ class PagifySDK {
                     window.parent.postMessage({ 
                         type: "PDF_ERROR", 
                         error: error.message,
-                        iter: ${instanceId}
+                        iter: "${instanceId}"
                     }, "*");
                 }
             }
@@ -728,41 +719,54 @@ class PagifySDK {
             iframe.style.left = "-9999px";
             iframe.style.border = "none";
         }
-        
+
         return iframe;
     }
 
-    cleanupIframesOnContainerLevel(container) {
-        const oldPagifyIframes = container?.querySelectorAll(pagifyIframeIdentifier) || [];
-        oldPagifyIframes?.forEach(iframe => {
-            iframe?.remove();
-        });
-    }
-
-    cleanupIframesOnDOMLevel() {
-        const oldPagifyIframes = document?.querySelectorAll(pagifyIframeIdentifier) || [];
-        oldPagifyIframes?.forEach(iframe => {
-            iframe?.remove();
-        });
+    generateJobId() {
+        const rand = (typeof crypto !== "undefined" && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : Math.random().toString(36).slice(2);
+        return `pg-${Date.now()}-${rand}`;
     }
 
     /**
-     * Get container element for iframe
+     * Build the caller-facing handle returned from render().
+     * @param {string} jobId
+     * @returns {{id: string, cleanup: function, isAlive: function}}
+     */
+    // so when caller does window.pagify.render they get this cleanup method
+    makeHandle(jobId) {
+        return {
+            id: jobId,
+            cleanup: () => this.destroyJob(jobId),
+            isAlive: () => !!this.jobs[jobId],
+        };
+    }
+
+    /**
+     * Remove a single job's iframe and free its state. Idempotent and
+     * instance-scoped — only ever touches the one iframe for this job.
+     */
+    destroyJob(jobId) {
+        const job = this.jobs[jobId];
+        if (!job) return;
+        job.iframe?.remove();
+        delete this.jobs[jobId];
+        delete this.callbackStorage[jobId];
+    }
+
+    /**
+     * Resolve the mount target. Returns the matched container element, or
+     * document.body as fallback. No cleanup side-effects.
      */
     getContainer(containerSelector) {
-        let container;
         if (containerSelector) {
-            container = document.querySelector(containerSelector);
-            if (!container) {
-                console.warn(`Container with selector "${containerSelector}" not found. Using document.body instead.`);
-                container = document.body;
-            }
-            this.cleanupIframesOnContainerLevel(container);
-        } else {
-            container = document.body;
-            this.cleanupIframesOnDOMLevel();
+            const el = document.querySelector(containerSelector);
+            if (el) return el;
+            console.warn(`Container with selector "${containerSelector}" not found. Using document.body instead.`);
         }
-        return container;
+        return document.body;
     }
 
     /**
