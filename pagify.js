@@ -36,7 +36,7 @@ class PagifySDK {
     initMessageListener() {
         if (typeof window === "undefined") return;
 
-        window.addEventListener("message", (event) => {
+        window.addEventListener("message", async (event) => {
             const data = event?.data;
             if (!data?.type) return;
 
@@ -49,35 +49,51 @@ class PagifySDK {
             const job = this.jobs[data.iter];
             if (!job) return;
             // Only trust messages coming from this job's own iframe.
-            // govind
             if (event.source !== job.iframe.contentWindow) return;
 
-            switch (data.type) {
-                case "PDF_READY":
-                    job.onPdfReady?.(data.blobUrl);
-                    window.dispatchEvent(new CustomEvent("pdfReady", { detail: { blobUrl: data.blobUrl } }));
-                    break;
-                case "PDF_ERROR":
-                    console.error("PDF generation error:", data.error);
-                    job.onPdfError?.(data.error);
-                    window.dispatchEvent(new CustomEvent("pdfError", { detail: { error: data.error } }));
-                    break;
-                case "PREVIEW_READY":
-                    job.onPreviewReady?.({ success: true });
-                    window.dispatchEvent(new CustomEvent("previewReady", { detail: { success: true } }));
-                    break;
-                case "PREVIEW_ERROR":
-                    console.error("Preview error:", data.error);
-                    job.onPreviewReady?.({ success: false, error: data.error });
-                    window.dispatchEvent(new CustomEvent("previewError", { detail: { success: false, error: data.error } }));
-                    break;
-                default:
-                    return;
+            // Only these are terminal events that consume the job + trigger teardown.
+            const isTerminal =
+                data.type === "PDF_READY" ||
+                data.type === "PDF_ERROR" ||
+                data.type === "PREVIEW_READY" ||
+                data.type === "PREVIEW_ERROR";
+            if (!isTerminal) return;
+
+            // IMPORTANT: await the caller's callback before teardown.
+            // The blobUrl is created with URL.createObjectURL INSIDE the iframe,
+            // so it is revoked the moment the iframe is removed. A headless
+            // caller does `await fetch(blobUrl)` to read the blob — if we reap
+            // the iframe synchronously we revoke the URL mid-read and the fetch
+            // fails intermittently. Draining the consumer first makes teardown
+            // deterministic. (try/catch so a throwing caller still gets reaped.)
+            try {
+                switch (data.type) {
+                    case "PDF_READY":
+                        await job.onPdfReady?.(data.blobUrl);
+                        window.dispatchEvent(new CustomEvent("pdfReady", { detail: { blobUrl: data.blobUrl } }));
+                        break;
+                    case "PDF_ERROR":
+                        console.error("PDF generation error:", data.error);
+                        await job.onPdfError?.(data.error);
+                        window.dispatchEvent(new CustomEvent("pdfError", { detail: { error: data.error } }));
+                        break;
+                    case "PREVIEW_READY":
+                        await job.onPreviewReady?.({ success: true });
+                        window.dispatchEvent(new CustomEvent("previewReady", { detail: { success: true } }));
+                        break;
+                    case "PREVIEW_ERROR":
+                        console.error("Preview error:", data.error);
+                        await job.onPreviewReady?.({ success: false, error: data.error });
+                        window.dispatchEvent(new CustomEvent("previewError", { detail: { success: false, error: data.error } }));
+                        break;
+                }
+            } catch (err) {
+                console.error("Pagify callback error:", err);
             }
 
             // cleanup policy:
             // - headless worker (no caller container): the iframe was only used to
-            //   produce the blob, so remove it now.
+            //   produce the blob, so remove it now that the caller has drained it.
             // - container-mounted (caller owns the visible view): keep the iframe;
             //   the caller removes it via job.cleanup() on their own schedule.
             if (job.hasContainer) {
