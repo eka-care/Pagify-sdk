@@ -659,7 +659,9 @@ class PagifySDK {
                             scale: 2,
                             useCORS: true,
                             allowTaint: false,
-                            backgroundColor: '#ffffff'
+                            backgroundColor: '#ffffff',
+                            scrollX: 0,
+                            scrollY: 0,
                         },
                         jsPDF: { 
                             unit: "mm", 
