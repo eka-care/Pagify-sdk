@@ -105,6 +105,8 @@ Renders HTML content as a paginated PDF.
 | `onPdfReady` | `function` | `null` | Callback when PDF is ready (receives blobUrl) |
 | `onPdfError` | `function` | `null` | Callback when PDF generation fails (receives error) |
 | `onPreviewReady` | `function` | `null` | Callback when preview completes (receives {success, error?}) |
+| `stableTablePagination` | `boolean` | `false` | Opt-in table pagination fixes — see [Stable table pagination](#stable-table-pagination) |
+| `onPaginationValidation` | `function` | `null` | With `stableTablePagination`: called once pagination finishes with the row-count check `{ source, printed, missing, clipped, misaligned, ok }` |
 
 #### Example with Advanced Styling
 
@@ -245,6 +247,40 @@ Use `pageNumber` and `totalPages` classes for dynamic content:
 .page-break-after { page-break-after: always; }
 .page-break-avoid { page-break-inside: avoid; }
 ```
+
+### Stable table pagination
+
+`stableTablePagination: true` (opt-in, off by default for a gradual rollout) fixes the ways long
+tables lose or garble rows when they break across pages:
+
+- **Header repeats without dropping rows.** `<thead>` is repeated on every continued page *before*
+  Paged.js measures the page. (The default handler adds it afterwards, which makes the page taller
+  than measured and pushes the last row of each continued page out of the printed area.)
+- **Rows stay whole only when they fit.** Rows that fit on a page are never split. A row taller than
+  a page is cut, before pagination, into sub-rows at block boundaries (e.g. between `<div>`s or
+  `<p>`s), so it continues on the next page instead of breaking the layout. Text is never cut
+  mid-line; a single block taller than a page is left to Paged.js and reported if it doesn't print.
+- **rowspan groups paginate.** A cell like `<td rowspan="80">Breakfast</td>` is repeated as the
+  group's label on each continued page, with the column closed at the page edges and every other
+  column aligned.
+- **Nothing silently disappears.** After pagination every `<tbody>` row (outside the running
+  header/footer) is checked to be *visible* inside a page. The result is passed to
+  `onPaginationValidation`, dispatched as a `paginationValidation` window event, and logged
+  (`console.error` on failure):
+
+```javascript
+pagify.render({
+    body_html,
+    stableTablePagination: true,
+    onPaginationValidation: (result) => {
+        // { source: 80, printed: 80, missing: [], clipped: [], misaligned: [], ok: true }
+        if (!result.ok) reportToMonitoring(result);
+    },
+    onPdfReady: (blobUrl) => { /* unchanged */ },
+});
+```
+
+With the flag off or omitted, the generated document is byte-identical to previous versions.
 
 ### Base64 Images
 
