@@ -290,6 +290,53 @@ For offline compatibility, use base64 encoded images:
 <img src="data:image/png;base64,iVBORw0KGgoAAAANS..." alt="Logo">
 ```
 
+## Server-side rendering (pagify-utils)
+
+The HTML document Pagify paginates is built in one place, `pagify-utils/` — plain CommonJS with zero
+dependencies. The browser SDK uses it for its iframe; a server renderer (e.g. with Puppeteer)
+uses the **same** builder, so pagination fixes land everywhere at once instead of in N copies.
+
+Install from GitHub (no build step runs on install):
+
+```bash
+npm install github:eka-care/Pagify-sdk#<tag-or-commit>
+```
+
+```ts
+import * as fs from "fs";
+import { buildIframeHTML, PAGEDJS_POLYFILL_PATH } from "@eka-care/pagify-sdk/pagify-utils";
+
+// Read once at cold start: the Paged.js version Pagify is tested against (0.4.3).
+const PAGED_JS = fs.readFileSync(PAGEDJS_POLYFILL_PATH as string, "utf8");
+
+const html = buildIframeHTML({
+    body_html, header_html, footer_html, head_html,
+    page_size: "A4", margin_left: "10mm", margin_right: "10mm",
+    header_height: "20mm", footer_height: "15mm", page_number_selector: ".pageno",
+    isViewOnlySkipMakingPDF: true,           // Puppeteer makes the PDF, not html2pdf
+    pagedjs_inline: PAGED_JS,                // or pagedjs_url: "https://…/paged.polyfill.js"
+    completionCallbackName: "onCustomEvent", // called once pagination finishes
+    stableTablePagination: true,
+});
+
+// Puppeteer
+await page.exposeFunction("onCustomEvent", async ({ total, validation }) => {
+    if (validation && !validation.ok) log.error({ validation }, "rows lost in pagination");
+    const pdf = await page.pdf({ format: "A4", printBackground: true });
+});
+await page.setContent(html);
+```
+
+`buildIframeHTML` takes the same options as `pagify.render()` (see `pagify-utils/index.d.ts`), plus:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `pagedjs_url` | unpkg `pagedjs@0.4.3` | Where to load Paged.js from (also accepted by `render()`) |
+| `pagedjs_inline` | `null` | Paged.js source to inline instead (offline renderers); also accepted by `render()` |
+| `completionCallbackName` | `null` | Global function called with `{ total, validation }` when pagination finishes |
+
+With none of these set, the document is byte-identical to what `pagify.render()` has always built.
+
 ## Browser Support
 
 - Chrome 60+
@@ -300,8 +347,11 @@ For offline compatibility, use base64 encoded images:
 
 ## Dependencies
 
-- [Paged.js](https://pagedjs.org/) - CSS paged media polyfill
-- [html2pdf.js](https://github.com/eKoopmans/html2pdf.js) - HTML to PDF conversion
+None at install time. The rendering iframe loads its libraries itself:
+
+- [Paged.js](https://pagedjs.org/) - CSS paged media polyfill (from unpkg by default, or `pagedjs_url` /
+  `pagedjs_inline`; a copy of 0.4.3 ships in `pagify-utils/paged.polyfill.js`)
+- [html2pdf.js](https://github.com/eKoopmans/html2pdf.js) - HTML to PDF conversion (from unpkg, PDF mode only)
 
 ## TypeScript Support
 

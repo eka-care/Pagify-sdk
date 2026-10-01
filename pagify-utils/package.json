@@ -1,0 +1,5 @@
+{
+  "//": "Resolves `@eka-care/pagify-sdk/pagify-utils` (incl. TypeScript moduleResolution \"node\"). Not a separate package.",
+  "main": "index.js",
+  "types": "index.d.ts"
+}
