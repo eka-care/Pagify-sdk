@@ -7,14 +7,15 @@
   "types": "dist/pagify.d.ts",
   "files": [
     "dist",
+    "pagify-utils",
     "src",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "NODE_ENV=production rollup -c",
+    "build": "NODE_ENV=production rollup -c && cp pagify.d.ts dist/",
     "build:dev": "rollup -c --watch",
-    "build:unminified": "rollup -c",
+    "build:unminified": "rollup -c && cp pagify.d.ts dist/",
     "dev": "npm run build:dev",
     "prepublishOnly": "npm run build",
     "test": "jest",
@@ -43,10 +44,6 @@
     "url": "https://github.com/eka-care/Pagify-sdk/issues"
   },
   "homepage": "https://github.com/eka-care/Pagify-sdk#readme",
-  "dependencies": {
-    "html2pdf.js": "^0.10.1",
-    "pagedjs": "^0.4.3"
-  },
   "devDependencies": {
     "@babel/core": "^7.22.0",
     "@babel/preset-env": "^7.22.0",

@@ -290,6 +290,32 @@ For offline compatibility, use base64 encoded images:
 <img src="data:image/png;base64,iVBORw0KGgoAAAANS..." alt="Logo">
 ```
 
+## Server-side rendering (pagify-utils)
+
+The HTML document Pagify paginates is built in one place, `pagify-utils/` — plain CommonJS with zero
+dependencies. The browser SDK uses it for its iframe; a server renderer (e.g. with Puppeteer)
+uses the **same** builder, so pagination fixes land everywhere at once instead of in N copies.
+
+```bash
+npm install github:eka-care/Pagify-sdk#<tag-or-commit>
+```
+
+```js
+const { buildIframeHTML, PAGEDJS_POLYFILL_PATH } = require("@eka-care/pagify-sdk/pagify-utils");
+
+const html = buildIframeHTML({
+    body_html,
+    isViewOnlySkipMakingPDF: true,                                // Puppeteer makes the PDF
+    pagedjs_inline: fs.readFileSync(PAGEDJS_POLYFILL_PATH, "utf8"), // no network
+    completionCallbackName: "onPagifyRendered",                   // page.exposeFunction(...)
+    stableTablePagination: true,
+});
+```
+
+**Full guide: [docs/server-side-rendering.md](docs/server-side-rendering.md)** — the Puppeteer flow,
+loading Paged.js and the "rendering complete" event in the browser vs on the server, the row-count
+validation payload, every option, production notes and troubleshooting.
+
 ## Browser Support
 
 - Chrome 60+
@@ -300,8 +326,11 @@ For offline compatibility, use base64 encoded images:
 
 ## Dependencies
 
-- [Paged.js](https://pagedjs.org/) - CSS paged media polyfill
-- [html2pdf.js](https://github.com/eKoopmans/html2pdf.js) - HTML to PDF conversion
+None at install time. The rendering iframe loads its libraries itself:
+
+- [Paged.js](https://pagedjs.org/) - CSS paged media polyfill (from unpkg by default, or `pagedjs_url` /
+  `pagedjs_inline`; a copy of 0.4.3 ships in `pagify-utils/paged.polyfill.js`)
+- [html2pdf.js](https://github.com/eKoopmans/html2pdf.js) - HTML to PDF conversion (from unpkg, PDF mode only)
 
 ## TypeScript Support
 

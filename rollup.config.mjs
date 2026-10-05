@@ -35,7 +35,6 @@ export default [
             }),
             isProduction && terser()
         ].filter(Boolean),
-        external: ['pagedjs', 'html2pdf.js']
     },
   
     // UMD build for browsers
@@ -46,11 +45,7 @@ export default [
             format: 'umd',
             name: 'Pagify',
             exports: 'named',
-            sourcemap: true,
-            globals: {
-                'pagedjs': 'PagedJS',
-                'html2pdf.js': 'html2pdf'
-            }
+            sourcemap: true
         },
         plugins: [
             nodeResolve({
@@ -72,7 +67,6 @@ export default [
             }),
             isProduction && terser()
         ].filter(Boolean),
-        external: ['pagedjs', 'html2pdf.js']
     },
 
     // Standalone build with dependencies bundled

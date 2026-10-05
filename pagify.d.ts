@@ -61,6 +61,12 @@ export interface PagifyOptions {
 
   /** Called once pagination finishes (only with stableTablePagination) */
   onPaginationValidation?: (result: PaginationValidationResult) => void;
+
+  /** Where the iframe loads Paged.js from (default: unpkg, 0.4.3) */
+  pagedjs_url?: string;
+
+  /** Paged.js source to inline instead of loading pagedjs_url */
+  pagedjs_inline?: string | null;
 }
 
 /** Row-count check reported by stableTablePagination */
