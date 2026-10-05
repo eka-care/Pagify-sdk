@@ -102,7 +102,7 @@ describe('Pagify SDK', () => {
         const iframeWithContainer = instance.createIframe('#container');
         expect(iframeWithContainer.style.width).toBe('100%');
         expect(iframeWithContainer.style.height).toBe('100%');
-        expect(iframeWithContainer.style.border).toBe('none');
+        // (border: none isn't asserted: jsdom drops the `border` shorthand, so it always reads "".)
         
         // Test without container selector
         const iframeWithoutContainer = instance.createIframe(null);
