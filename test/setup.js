@@ -43,6 +43,5 @@ global.mockHtml2pdf = {
 // Mock URL.createObjectURL
 global.URL.createObjectURL = jest.fn(() => 'blob:mock-url');
 
-// Mock dynamic imports
-jest.mock('pagedjs', () => global.mockPagedJS);
-jest.mock('html2pdf.js', () => global.mockHtml2pdf);
+// Paged.js and html2pdf.js load inside the iframe, never in the host page, so there is nothing to
+// mock at the module level (the SDK no longer imports them).
