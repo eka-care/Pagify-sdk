@@ -5,7 +5,63 @@ on:
     tags:
       - pagify-beta-*
 
+env:
+  TRIVY_EXIT_CODE: 1
+  TRIVY_SEVERITY: CRITICAL,HIGH
+  TRIVY_SCAN: vuln  #use vuln,secret to scan vuln and secrets
+
 jobs:
+
+  # secret-scan:
+    # runs-on: [dev-spot-ec2-runner-arm64]
+    # permissions:
+      # contents: read
+      # id-token: write
+    # steps:
+      # - name: Checkout code (tagged commit + its parent)
+        # uses: actions/checkout@v6
+        # with:
+          # fetch-depth: 2   # only the tagged commit and its parent (no old history)
+          # persist-credentials: false
+
+      # - name: iam role for the github runner
+        # uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        # with:
+          # role-to-assume: arn:aws:iam::607765814920:role/github-runner-role
+          # role-session-name: runner-role
+          # aws-region: ap-south-1
+
+      # - name: Login to Amazon ECR
+        # uses: aws-actions/amazon-ecr-login@v1
+
+      # - name: Gitleaks secret scan (only the commit of this dev tag)
+        # run: |
+          # set -o pipefail
+          # RANGE="-1 ${GITHUB_SHA}"
+          # echo "Scanning commits: $RANGE"
+          # docker run --rm --network none -v "$PWD:/repo" \
+            # -e GIT_CONFIG_COUNT=1 \
+            # -e GIT_CONFIG_KEY_0=safe.directory \
+            # -e GIT_CONFIG_VALUE_0=/repo \
+            # 607765814920.dkr.ecr.ap-south-1.amazonaws.com/tools/gitleaks@sha256:aab064c7fe0d0dc9994f83456079057571ecb42e0ce6b37f20b6c5511005bf77 \
+            # git /repo --redact --verbose --no-banner \
+            # --log-opts="$RANGE" \
+            # 2>&1 | tee gitleaks.txt
+      # - name: Gitleaks report
+        # if: always()
+        # run: |
+          # {
+            # echo "## 🔑 Gitleaks secret scan"
+            # echo '```'
+            # if [ -s gitleaks.txt ]; then
+              # sed 's/\x1b\[[0-9;]*m//g' gitleaks.txt | head -c 60000
+            # else
+              # echo "Scan did not run."
+            # fi
+            # echo
+            # echo '```'
+          # } >> "$GITHUB_STEP_SUMMARY"
+
   build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
@@ -34,6 +90,61 @@ jobs:
         env:
           NODE_ENV: production
         run: npm run build
+
+      # - name: iam role for the github runner (Trivy DB from S3)
+        # uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        # with:
+          # role-to-assume: arn:aws:iam::607765814920:role/github-runner-role
+          # role-session-name: runner-role
+          # aws-region: ap-south-1
+
+      # - name: Trivy — dependency scan
+        # env:
+          # TMPDIR: ${{ runner.temp }}
+          # TRIVY_DB_S3: ${{ vars.TRIVY_DB_S3_DEV }}
+          # TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
+          # TRIVY_SKIP_DB_UPDATE: true
+        # run: |
+          # set +e -o pipefail
+          # mkdir -p "$TRIVY_CACHE_DIR"
+          # aws s3 cp "$TRIVY_DB_S3" "$RUNNER_TEMP/trivy-db.tar.gz" --no-progress
+          # tar -xzf "$RUNNER_TEMP/trivy-db.tar.gz" -C "$TRIVY_CACHE_DIR"
+          # trivy version
+          # trivy fs --skip-version-check --scanners $TRIVY_SCAN --severity $TRIVY_SEVERITY --ignore-unfixed --exit-code $TRIVY_EXIT_CODE \
+            # --format template --template '{{- range . }}{{- $t := .Target }}{{- range .Vulnerabilities }}{{ printf "%-9s | %-16s | %-12s | %-10s | %-10s | %s\n" .Severity .VulnerabilityID .PkgName .InstalledVersion .FixedVersion $t }}{{- end }}{{- end }}' \
+            # --skip-dirs '**/node_modules' . | sort -u > "$RUNNER_TEMP/vulns.txt"
+          # rc=$?
+          # Log: boxed table
+          # awk 'BEGIN { FS="|"; n=split("SEVERITY|CVE|PACKAGE|INSTALLED|FIXED|WHERE", h, "|"); for (i=1;i<=n;i++) w[i]=length(h[i]) }
+              # { r++; for (i=1;i<=n;i++) { v=$i; gsub(/^ +| +$/, "", v); c[r,i]=v; if (length(v)>w[i]) w[i]=length(v) } }
+              # function rep(ch,k,  s,j) { s=""; for (j=0;j<k;j++) s=s ch; return s }
+              # function line(l,m,e,  i,s) { s=l; for (i=1;i<=n;i++) s=s rep("─", w[i]+2) (i<n?m:e); print s }
+              # function row(a,  i,s) { s="│"; for (i=1;i<=n;i++) s=s sprintf(" %-*s │", w[i], a[i]); print s }
+              # END { if (!r) { print "No CRITICAL/HIGH vulnerabilities with a fix"; exit }
+                    # line("┌","┬","┐"); row(h); line("├","┼","┤")
+                    # for (k=1;k<=r;k++) { for (i=1;i<=n;i++) x[i]=c[k,i]; row(x); if (k<r) line("├","┼","┤") }
+                    # line("└","┴","┘") }' "$RUNNER_TEMP/vulns.txt"
+          # echo; echo "Summary:"
+          # awk -F'|' '{gsub(/ /,"",$1); print $1}' "$RUNNER_TEMP/vulns.txt" | sort | uniq -c
+
+          # Run Summary page: one section per severity
+          # {
+            # echo "# 🛡️ Trivy dependency scan"
+            # if [ ! -s "$RUNNER_TEMP/vulns.txt" ]; then
+              # echo "## ✅ No CRITICAL/HIGH vulnerabilities with a fix"
+            # fi
+            # for sev in CRITICAL HIGH; do
+              # n=$(grep -c "^$sev" "$RUNNER_TEMP/vulns.txt")
+              # [ "$n" -eq 0 ] && continue
+              # icon=$([ "$sev" = CRITICAL ] && echo 🔴 || echo 🟠)
+              # echo "## $icon $sev ($n)"
+              # echo "| CVE | Package | Installed | Fixed | Where |"
+              # echo "|---|---|---|---|---|"
+              # grep "^$sev" "$RUNNER_TEMP/vulns.txt" | awk -F' *\\| *' '{print "| "$2" | "$3" | "$4" | "$5" | "$6" |"}'
+              # echo
+            # done
+          # } >> "$GITHUB_STEP_SUMMARY"
+          # exit $rc
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
