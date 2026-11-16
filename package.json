@@ -44,7 +44,7 @@
   },
   "homepage": "https://github.com/eka-care/Pagify-sdk#readme",
   "dependencies": {
-    "html2pdf.js": "^0.10.1",
+    "html2pdf.js": "^0.14.0",
     "pagedjs": "^0.4.3"
   },
   "devDependencies": {
