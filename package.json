@@ -44,7 +44,7 @@
   },
   "homepage": "https://github.com/eka-care/Pagify-sdk#readme",
   "dependencies": {
-    "html2pdf.js": "^0.10.1",
+    "html2pdf.js": "^0.14.0",
     "pagedjs": "^0.4.3"
   },
   "devDependencies": {
@@ -54,7 +54,7 @@
     "@rollup/plugin-commonjs": "^25.0.0",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^15.0.0",
-    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-terser": "^1.0.2",
     "eslint": "^8.42.0",
     "jest": "^29.5.0",
     "rollup": "^3.25.0",
